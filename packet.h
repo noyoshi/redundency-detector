@@ -6,11 +6,12 @@
 typedef struct _packet {
     /* bool isValid; */ 
     unsigned char data[2400]; /* 2400 bytes is max packet size */
-    /* int hash; /1* Hash of the packet *1/ */
+    int hash; /* Hash of the packet */
     /* int length; /1* Length of the packet *1/ */
 } packet;
 
-packet* parsePacket(FILE *);
+int hashData(unsigned char[2400]); 
+bool checkHash(int, packet *[30000]); 
+bool checkContent(); 
 
-void freePacket(packet *);
-packet * allocPacket();
+packet* parsePacket(FILE *);

@@ -4,7 +4,6 @@
 #include <errno.h>
 #include <string.h>
 
-#include "hash.h"
 #include "packet.h"
 #include "debug.h"
 
@@ -23,11 +22,9 @@ void report(int hits, int processedData, int redundantData) {
 }
 
 void freePackets(packet * packetHolder[30000]) {
+    /* Frees the packets in the packet holder */
     for(int i = 0; i < 30000; i ++) {
-        if (packetHolder[i] != NULL) {
-            printf("%x\n", packetHolder[i]);
-            /* free(packetHolder[i]); */
-        }
+        if (packetHolder[i] != NULL) free(packetHolder[i]);
     }
 }
 
@@ -43,22 +40,23 @@ void analyzeFile(FILE * fp) {
 
     // TODO make this a better data structure
     // this is just a temporary thing!
-    packet * packetHolder[30000];
+    packet * packetHolder[30000] = { NULL };
 
     /* Reads the input file */
     while(!feof(fp)) {
         // Parses out the packets from the file pointer
         packetHolder[packetIndex++] = parsePacket(fp);
+        // TODO do some kind of signal to the consumer threads to let them know
+        // there is more data?
     }
 
     /* Frees the packets */
     freePackets(packetHolder);
 }
 
-void analyzePacket(packet p) {
+void analyzePacket(packet p, packet * packetHolder[30000]) {
     /* Consumer that gets packets from the queue and analyzes them */
-    // TODO create the hash for the packet, and save it on the packet
-    // TODO check to see if the hash is in the hash data structure
+    // TODO check to see if the hash of the packet is in the hash data structure
     // TODO if the hash is there, check to see if the data is identical
     // TODO handle the match / no match
 }

@@ -10,29 +10,27 @@
 
 using namespace std;
 
-/* void freePacket(packet * p) { */
-/*     if (p -> data != NULL) { */
-/*         free(p -> data); */
-/*     } */
-/*     free(p); */
-/* } */
+int hashData(unsigned char data[2400]) {
+    /* Hashes the given data and returns the hashed data */
+    // TODO implement this
+    return -1;
+}
 
-/* packet* allocPacket() { */
-/*     packet * p = (packet *) malloc(sizeof(packet)); */
+bool checkHash(int hash, packet * packetHolder[30000]) {
+    return false;
+}
 
-/*     p->data = (unsigned char *) malloc(sizeof(char) * 2400); */
-/*     if (p->data == NULL) { */
-/*         free(p); */
-/*         ERROR; */
-/*         return NULL; */
-/*     } */
-
-/*     return p; */
-/* } */
-
+bool checkContent() {
+    /* Checks the actual content of the packet with the stored packet to confirm
+     * a match. 
+     * You will want to use memcmp, not strcmp as everything in the files is
+     * binary content. 
+     */
+    return false;
+}
 
 packet* parsePacket(FILE * fp) {
-    /* Parses a single packet from the file we are reading */
+    /* Parses the file we are reading and creates a single packet */
     uint32_t     packetLength;
 
     packet *p = NULL;
@@ -59,7 +57,9 @@ packet* parsePacket(FILE * fp) {
         // TODO set something so that the consumer can know that there is
         // some new data to work on
         p = (packet*) malloc(sizeof(packet));
+        if (p == NULL) ERROR;
         check(fread(p->data, 1, packetLength, fp));
+        p->hash = hashData(p->data);
         /* p->length = packetLength; // TODO does this work...? */
     } else {
         printf("Skipping %d bytes ahead - packet is wrong size\n", packetLength);
