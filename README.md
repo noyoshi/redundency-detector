@@ -16,3 +16,6 @@ memory limits), you may elect to use whatever data structures and strategy you d
 ### TODOs
 - [ ] Detect redundancy on a whole packet payload basis using a hash function across the packet payload.
 - [ ] Detect redundancy on sub-packet windows (minimum of 64 bytes).
+
+### Specifications 
+Program invocation should take in several arguments, the level to run the program, the number of threads that can be used, and the various files to be processed in order by the system. You may presume that the number of files to process is limited to 10 or less. For the case where the level is not specified, you should run using Level 2. For the case where the number of threads is not specified, you should use your optimal value. You should mandate a minimum number of two threads to allow for at least one producer and one consumer thread (you may ignore the main thread).
