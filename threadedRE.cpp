@@ -21,13 +21,6 @@ void report(int hits, int processedData, int redundantData) {
     printf("%d redundency detected\n", processedData / redundantData);
 }
 
-void freePackets(packet * packetHolder[30000]) {
-    /* Frees the packets in the packet holder */
-    for(int i = 0; i < 30000; i ++) {
-        if (packetHolder[i] != NULL) free(packetHolder[i]);
-    }
-}
-
 void analyzeFile(FILE * fp) {
     /* Producer that loops through the input file and fills a queue of packets */
 
@@ -45,7 +38,9 @@ void analyzeFile(FILE * fp) {
     /* Reads the input file */
     while(!feof(fp)) {
         // Parses out the packets from the file pointer
-        packetHolder[packetIndex++] = parsePacket(fp);
+        packet * p = parsePacket(fp);
+        // TODO save some info about the packet? ie how large it is? maybe
+        packetHolder[packetIndex++] = p;
         // TODO do some kind of signal to the consumer threads to let them know
         // there is more data?
     }
@@ -54,6 +49,7 @@ void analyzeFile(FILE * fp) {
     freePackets(packetHolder);
 }
 
+// TODO make this threadable (single argument)
 void analyzePacket(packet p, packet * packetHolder[30000]) {
     /* Consumer that gets packets from the queue and analyzes them */
     // TODO check to see if the hash of the packet is in the hash data structure
@@ -70,6 +66,11 @@ int main(int argc, char * argv[]) {
      * - If yes, then is it an exact match?
      */
 
+    /* For level 2, we want to compute the match over a small window of the data
+     * in the packet. If there is a match, then we keep going into the data to
+     * see how far of a match we have?
+     */
+
     /* Constraints:
      * - Memory limit at 64 MB
      * - Needs to be multithreaded (use pthreads, condition variables)
@@ -83,6 +84,9 @@ int main(int argc, char * argv[]) {
     int RET_STATUS = EXIT_FAILURE;
 
     /* Data (in bytes) */
+    // NOTE due to the memory constraints on this program, we cannot save every
+    // packet... keep track of this data as we go? might have to store this on
+    // some variable that we pass to the threads instead...
     int processedData = 0;
     int redundantData = 0;
     

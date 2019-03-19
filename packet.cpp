@@ -29,6 +29,13 @@ bool checkContent() {
     return false;
 }
 
+void freePackets(packet * packetHolder[30000]) {
+    /* Frees the packets in the packet holder */
+    for(int i = 0; i < 30000; i ++) {
+        if (packetHolder[i] != NULL) free(packetHolder[i]);
+    }
+}
+
 packet* parsePacket(FILE * fp) {
     /* Parses the file we are reading and creates a single packet */
     uint32_t     packetLength;

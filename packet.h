@@ -14,4 +14,5 @@ int hashData(unsigned char[2400]);
 bool checkHash(int, packet *[30000]); 
 bool checkContent(); 
 
+void freePackets(packet * [30000]); 
 packet* parsePacket(FILE *);
