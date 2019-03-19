@@ -3,13 +3,14 @@
 #include <vector>
 #include <stdio.h>
 
-std::vector<int> getPacketSizes(); 
-
-void processPacketFile();
-void DumpAllPacketLengths (FILE *); 
-
 typedef struct _packet {
-    bool isValid; 
+    /* bool isValid; */ 
     unsigned char data[2400]; /* 2400 bytes is max packet size */
-    int hash; /* Hash of the packet */
+    /* int hash; /1* Hash of the packet *1/ */
+    /* int length; /1* Length of the packet *1/ */
 } packet;
+
+packet* parsePacket(FILE *);
+
+void freePacket(packet *);
+packet * allocPacket();
