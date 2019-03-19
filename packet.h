@@ -6,6 +6,7 @@
 std::vector<int> getPacketSizes(); 
 
 void processPacketFile();
+void DumpAllPacketLengths (FILE *); 
 
 typedef struct _packet {
     bool isValid; 

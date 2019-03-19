@@ -1,8 +1,6 @@
 /* For analyzing the packet that we decoded */
 #include "hash.h"
 
-using namespace std;
-
 int hash() {
     /* Hashes the given data and returns the hashed data */
     return -1;

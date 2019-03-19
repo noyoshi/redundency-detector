@@ -20,6 +20,7 @@ void report(int hits, int processedData, int redundantData) {
 
 void analyzeFile(FILE * inputFile) {
     /* Producer that loops through the input file and fills a queue of packets */
+    // TODO example can be found in packet.cpp "DumpAllPackets"
 }
 
 void analyzePacket(packet p) {
@@ -49,6 +50,9 @@ int main(int argc, char * argv[]) {
     /* Data (in bytes) */
     int processedData = 0;
     int redundantData = 0;
-
+    
+    FILE * inputFile = fopen("data/Dataset-Small.pcap", "r");
+    DumpAllPacketLengths(inputFile);
+    fclose(inputFile);
     return 0;
 }
