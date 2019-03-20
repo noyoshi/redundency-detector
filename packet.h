@@ -10,7 +10,7 @@ typedef struct _packet {
     /* int length; /1* Length of the packet *1/ */
 } packet;
 
-int hashData(unsigned char[2400]); 
+unsigned long hashData(unsigned char[2400]); 
 bool checkHash(int, packet *[30000]); 
 bool checkContent(); 
 
