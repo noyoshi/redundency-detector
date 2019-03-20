@@ -4,6 +4,7 @@
 #include <vector>
 #include <pcap.h>
 #include <stdio.h>
+#include <vector>
 
 #include "packet.h"
 #include "debug.h"
@@ -16,7 +17,7 @@ int hashData(unsigned char data[2400]) {
     return -1;
 }
 
-bool checkHash(int hash, packet * packetHolder[30000]) {
+bool checkHash(int hash, vector<packet *> packetHolder) {
     return false;
 }
 
@@ -29,11 +30,21 @@ bool checkContent() {
     return false;
 }
 
-void freePackets(packet * packetHolder[30000]) {
+void freePackets(vector<packet *> packetHolder) {
     /* Frees the packets in the packet holder */
-    for(int i = 0; i < 30000; i ++) {
+    for (int i = 0; i < packetHolder.size(); i ++) {
         if (packetHolder[i] != NULL) free(packetHolder[i]);
     }
+}
+
+float getTotalData(vector<packet *> packetHolder) {
+    float totalSize = 0;
+    for (int i = 0; i < 30000; i ++) {
+        if (packetHolder[i] != NULL) {
+            totalSize += packetHolder[i]->size;
+        }
+    }
+    return totalSize / 1000000;
 }
 
 packet* parsePacket(FILE * fp) {
@@ -58,6 +69,9 @@ packet* parsePacket(FILE * fp) {
     if(packetLength < 2400 && packetLength > 128) {
         printf("Packet length was %d\n", packetLength);
         /* Might not be a bad idea to pay attention to this return value */
+        // We want to skip the first 52 bytes of the packer per the instructions
+        check(fseek(fp, 52, SEEK_CUR));
+        int dataLength = packetLength - 52;
         // packetData contains the byte data we care about 
         // TODO intialize a new packet data structure here
         // TODO save the packet to the shared data structure here
@@ -65,9 +79,9 @@ packet* parsePacket(FILE * fp) {
         // some new data to work on
         p = (packet*) malloc(sizeof(packet));
         if (p == NULL) ERROR;
-        check(fread(p->data, 1, packetLength, fp));
+        check(fread(p->data, 1, dataLength, fp));
         p->hash = hashData(p->data);
-        /* p->length = packetLength; // TODO does this work...? */
+        p->size = packetLength; // TODO is this the correct number?
     } else {
         printf("Skipping %d bytes ahead - packet is wrong size\n", packetLength);
         check(fseek(fp, packetLength, SEEK_CUR));

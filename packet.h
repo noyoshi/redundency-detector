@@ -5,14 +5,15 @@
 
 typedef struct _packet {
     /* bool isValid; */ 
-    unsigned char data[2400]; /* 2400 bytes is max packet size */
-    int hash; /* Hash of the packet */
-    /* int length; /1* Length of the packet *1/ */
+    unsigned char   data[2400]; /* 2400 bytes is max packet size */
+    int             hash; /* Hash of the packet */
+    uint32_t        size; /* Size of the packet */
 } packet;
 
 int hashData(unsigned char[2400]); 
-bool checkHash(int, packet *[30000]); 
+bool checkHash(int, std::vector<packet *>); 
 bool checkContent(); 
+float getTotalData(std::vector<packet *>);
 
-void freePackets(packet * [30000]); 
+void freePackets(std::vector<packet *>); 
 packet* parsePacket(FILE *);

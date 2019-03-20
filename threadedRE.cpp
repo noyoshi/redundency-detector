@@ -3,11 +3,22 @@
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
+#include <vector>
 
 #include "packet.h"
 #include "debug.h"
 
 using namespace std;
+
+/* This is the gloabl struct that we will want to modify in the consumer
+ * threads, eg we should increment hits and totalRedundantBytes when the
+ * consumer encounters a redundant packet 
+ */
+typedef struct _data {
+    int hits;
+    int totalBytesProcessed;
+    int totalRedundantBytes;
+} PacketData;
 
 void help() {
     // TODO
@@ -18,14 +29,25 @@ void report(int hits, int processedData, int redundantData) {
     /* Generates report for the program */
     printf("%d bytes processed\n", processedData);
     printf("%d hits\n", hits);
-    printf("%d redundency detected\n", processedData / redundantData);
+    printf("%d redundency detected\n", processedData / (redundantData * 1000000));
 }
 
-void analyzeFile(FILE * fp) {
+PacketData* analyzeFile(FILE * fp) {
     /* Producer that loops through the input file and fills a queue of packets */
 
     // Ignores the first 28 bytes of the file - which are global header
     // information
+    PacketData * returnData = (PacketData *) malloc(sizeof(PacketData));
+    if (returnData == NULL) {
+        return NULL;
+    }
+    
+    // Initialize struct before we start consuming the file
+    returnData->hits = 0;
+    returnData->totalBytesProcessed = 0;
+    returnData->totalRedundantBytes = 0;
+
+    /* Jump through the global header of the file */
     check(fseek(fp, 28, SEEK_SET));
     uint32_t     packetLength;
     char         packetData[2400];
@@ -33,18 +55,22 @@ void analyzeFile(FILE * fp) {
 
     // TODO make this a better data structure
     // this is just a temporary thing!
-    packet * packetHolder[30000] = { NULL };
+    vector<packet *> packetHolder;
 
     /* Reads the input file */
     while(!feof(fp)) {
         // Parses out the packets from the file pointer
         packet * p = parsePacket(fp);
         // TODO save some info about the packet? ie how large it is? maybe
-        packetHolder[packetIndex++] = p;
+        packetHolder.push_back(p);
+
+        if (p != NULL) totalValidPackets ++;
         // TODO do some kind of signal to the consumer threads to let them know
         // there is more data?
     }
 
+    fprintf(stderr, "%f total bytes\n", getTotalData(packetHolder));
+    fprintf(stderr, "%d total valid packets\n", totalValidPackets);
     /* Frees the packets */
     freePackets(packetHolder);
 }
@@ -78,7 +104,7 @@ int main(int argc, char * argv[]) {
 
     /* Note: We should keep track of the # of hits, and the total amount of data
      * we processed, and the total amount of data we saved (total data size of
-     * all redundant packets?)
+     * all redundant packets / total data processed)
      */
     int hits = 0;
     int RET_STATUS = EXIT_FAILURE;
@@ -89,15 +115,18 @@ int main(int argc, char * argv[]) {
     // some variable that we pass to the threads instead...
     int processedData = 0;
     int redundantData = 0;
-    
-    FILE * inputFile = fopen("data/Dataset-Small.pcap", "r");
-    if (inputFile == NULL) {
-        ERROR; 
-        goto END;
-    }
-    analyzeFile(inputFile);
+
+    FILE * inputFile = fopen(argv[1], "r");
+    if (inputFile == NULL) ERROR;
+    // Get the packet data from the file
+    PacketData * packetData = analyzeFile(inputFile);
+
+    // TODO do something with packet data eg make the report
+
+    /* Cleanup */
+    free(packetData);
     fclose(inputFile);
+
     RET_STATUS = EXIT_SUCCESS;
-END:
     return RET_STATUS;
 }
