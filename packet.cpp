@@ -11,13 +11,26 @@
 
 using namespace std;
 
-int hashData(unsigned char data[2400]) {
-    /* Hashes the given data and returns the hashed data */
-    // TODO implement this
-    return -1;
+/* Hashes the given data and returns the hashed data */
+/* djb2 hash */
+unsigned long hashData(unsigned char *str){
+    unsigned long hash = 5381;
+    int c;
+    while ((c = *str++)){
+        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+        std::cout << "current hash is " << hash << std::endl;
+    }
+    return hash;
 }
 
-bool checkHash(int hash, vector<packet *> packetHolder) {
+bool checkHash(unsigned long hash, vector<packet *> packetHolder) {
+    
+    for (auto u : packetHolder){
+        if (hash == hashData(u->data)){
+            return true;
+        }
+    }
+
     return false;
 }
 
