@@ -12,7 +12,7 @@ using namespace std;
 
 /* This is the gloabl struct that we will want to modify in the consumer
  * threads, eg we should increment hits and totalRedundantBytes when the
- * consumer encounters a redundant packet 
+ * consumer encounters a redundant packet
  */
 typedef struct _data {
     int hits;
@@ -41,7 +41,7 @@ PacketData* analyzeFile(FILE * fp) {
     if (returnData == NULL) {
         return NULL;
     }
-    
+
     // Initialize struct before we start consuming the file
     returnData->hits = 0;
     returnData->totalBytesProcessed = 0;
@@ -58,19 +58,24 @@ PacketData* analyzeFile(FILE * fp) {
     vector<packet *> packetHolder;
 
     /* Reads the input file */
+    /* We should stream stuff into the buffer and ONLY read in new packets when
+     * we can - we should not make the buffer too big due to the memory
+     * constraint...
+     */
     while(!feof(fp)) {
         // Parses out the packets from the file pointer
         packet * p = parsePacket(fp);
         // TODO save some info about the packet? ie how large it is? maybe
+        // TODO we should ONLY SAVE THE PACKET if the consumer decides we
+        // should... instead, here, we should simply add the packet to the
+        // buffer
         packetHolder.push_back(p);
 
-        if (p != NULL) totalValidPackets ++;
         // TODO do some kind of signal to the consumer threads to let them know
         // there is more data?
     }
 
     fprintf(stderr, "%f total bytes\n", getTotalData(packetHolder));
-    fprintf(stderr, "%d total valid packets\n", totalValidPackets);
     /* Frees the packets */
     freePackets(packetHolder);
 }
@@ -100,6 +105,13 @@ int main(int argc, char * argv[]) {
     /* Constraints:
      * - Memory limit at 64 MB
      * - Needs to be multithreaded (use pthreads, condition variables)
+     * - Needs to use a producer thread(s) to read the file, and consumer
+     *   thread(s) to process the redundancy detection
+     *   - We DO NOT NEED MORE THAN ONE CONSUMER / PRODUCER - I think we should
+     *   only have one and move up from there? (it seems like ONE of these needs
+     *   to be multithreaded though, eg we can either have multiple consumer or
+     *   producer threads, but do not necessarily need multiple for both?)
+     * - We need AT LEAST 2 extra threads (one consumer, one producer)
      */
 
     /* Note: We should keep track of the # of hits, and the total amount of data
