@@ -129,10 +129,12 @@ int main(int argc, char * argv[]) {
     int processedData = 0;
     int redundantData = 0;
 
+    // TODO: connect these parameters to the logic
     int level = 1;
     int numThreads = 2; // TODO: change to "optimal" when we know what that is
 
     int c;
+    // process command line arguments
     while((c = getopt(argc, argv, "l:t:")) != -1){
         switch(c){
             case 'l':
@@ -144,16 +146,19 @@ int main(int argc, char * argv[]) {
         }
     }
 
-    FILE * inputFile = fopen(argv[1], "r");
-    if (inputFile == NULL) ERROR;
-    // Get the packet data from the file
-    PacketData * packetData = analyzeFile(inputFile);
+    // process files remaining in command line arguments
+    for(int i = optind; i < argc; i++){
+        FILE * inputFile = fopen(argv[i], "r");
+        if (inputFile == NULL) ERROR;
+        // Get the packet data from the file
+        PacketData * packetData = analyzeFile(inputFile);
 
-    // TODO do something with packet data eg make the report
+        // TODO do something with packet data eg make the report
 
-    /* Cleanup */
-    free(packetData);
-    fclose(inputFile);
+        /* Cleanup */
+        free(packetData);
+        fclose(inputFile);
+    }
 
     RET_STATUS = EXIT_SUCCESS;
     return RET_STATUS;
