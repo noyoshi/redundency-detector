@@ -7,6 +7,7 @@
 
 #include "packet.h"
 #include "debug.h"
+#include "unistd.h"
 
 using namespace std;
 
@@ -127,6 +128,21 @@ int main(int argc, char * argv[]) {
     // some variable that we pass to the threads instead...
     int processedData = 0;
     int redundantData = 0;
+
+    int level = 1;
+    int numThreads = 2; // TODO: change to "optimal" when we know what that is
+
+    int c;
+    while((c = getopt(argc, argv, "l:t:")) != -1){
+        switch(c){
+            case 'l':
+                level = atoi(optarg);
+                break;
+            case 't':
+                numThreads = atoi(optarg);
+                break;
+        }
+    }
 
     FILE * inputFile = fopen(argv[1], "r");
     if (inputFile == NULL) ERROR;
