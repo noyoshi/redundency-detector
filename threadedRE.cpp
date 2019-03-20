@@ -17,6 +17,7 @@ using namespace std;
  * threads, eg we should increment hits and totalRedundantBytes when the
  * consumer encounters a redundant packet
  */
+
 typedef struct _data {
     int hits;
     int totalBytesProcessed;
@@ -105,7 +106,6 @@ void * producerThread(void * arg) {
     return 0;
 }
 
-
 void help() {
     // TODO
     /* Prints out a help message if the -h flag, or incorrect flags are given */
@@ -139,9 +139,6 @@ void analyzeFile(FILE * fp) {
 
     /* Jump through the global header of the file */
     check(fseek(fp, 28, SEEK_SET));
-    uint32_t     packetLength;
-    char         packetData[2400];
-    int packetIndex = 0;
 
     // TODO initialize the producer thread and start it...
     thread_args * producerArgs = (thread_args *) malloc(sizeof(thread_args));
@@ -182,11 +179,13 @@ void analyzeFile(FILE * fp) {
     for (int i = 0; i < numThreads; i ++) {
         if (pthread_join(consumers[i], NULL) < 0) ERROR;
         puts("joined a thread!");
-        printf("thread %d of %d done\n", i, numThreads);
+        printf("thread %d of %d done\n", i + 1, numThreads);
     }
+    puts("threads are done!");
 
     /* Frees the argument struct */
     free(producerArgs);
+    debug("done freeing");
 }
 
 int main(int argc, char * argv[]) {
@@ -259,5 +258,6 @@ int main(int argc, char * argv[]) {
     }
 
     RET_STATUS = EXIT_SUCCESS;
+    debug("?");
     return RET_STATUS;
 }
