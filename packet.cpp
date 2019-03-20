@@ -45,7 +45,7 @@ bool checkContent() {
 
 void freePackets(vector<packet *> packetHolder) {
     /* Frees the packets in the packet holder */
-    for (int i = 0; i < packetHolder.size(); i ++) {
+    for (size_t i = 0; i < packetHolder.size(); i ++) {
         if (packetHolder[i] != NULL) free(packetHolder[i]);
     }
 }
