@@ -3,7 +3,8 @@
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
-#include <vector>
+#include <pthread.h>
+#include <unistd.h>
 
 #include "packet.h"
 #include "debug.h"
@@ -15,11 +16,89 @@ using namespace std;
  * threads, eg we should increment hits and totalRedundantBytes when the
  * consumer encounters a redundant packet
  */
+
 typedef struct _data {
     int hits;
     int totalBytesProcessed;
     int totalRedundantBytes;
 } PacketData;
+
+typedef struct _thread__arg {
+    FILE * fp;
+    pthread_mutex_t * mutex;
+    pthread_cond_t * empty;
+    pthread_cond_t * fill;
+} thread_args;
+
+// TODO change buffer size to be larger??? Figure out how this plays into the
+// memory constraint of the assignment...
+int BUFFER_SIZE = 10;
+packet * sharedBuffer[10];
+int sharedBufferIndex = 0;
+int hits = 0;
+int totalBytesProcessed = 0;
+int totalRedundantBytes = 0;
+int packetsReadIn = 0;
+int packetsProcessed = 0;
+bool doneReading = false;
+int sharedBufferSize = 0;
+
+packet * get() {
+    // TODO consider taking this out as it is an extra subroutine call...
+    sharedBufferIndex --;
+    return sharedBuffer[sharedBufferIndex];
+}
+
+void * consumerThread(void * arg) {
+    /* Consumer thread */
+    // TODO implement the checking in here...
+    // MAKE SURE TO FREE THE PACKET STRUCT!!
+    /* Consumer that gets packets from the queue and analyzes them */
+    // TODO check to see if the hash of the packet is in the hash data structure
+    // TODO if the hash is there, check to see if the data is identical
+    // TODO handle the match / no match
+
+    thread_args * args = (thread_args *) arg;
+    while (!doneReading || sharedBufferSize > 0) {
+        pthread_mutex_lock(args->mutex);
+        while (!doneReading && sharedBufferSize == 0) {
+            pthread_cond_wait(args->fill, args->mutex);
+        }
+        // TODO do something with the packet
+        sharedBufferIndex --;
+        sharedBufferSize --;
+        pthread_cond_signal(args->empty);
+        pthread_mutex_unlock(args->mutex);
+    }
+    return 0;
+}
+
+void * producerThread(void * arg) {
+    /* Producer thread - loops through the file and adds stuff to the buffer */
+    thread_args * args = (thread_args *) arg;
+
+    // Loop through the file and parse the packets
+    while(!feof(args->fp)) {
+        // Parses out the packets from the file pointer
+        packet * p = parsePacket(args->fp);
+        pthread_mutex_lock(args->mutex);
+        // Wait while the buffer is full...
+        // THIS MIGHT NOT WORK! TODO CHECK
+        while (sharedBufferSize == BUFFER_SIZE) {
+            pthread_cond_wait(args->empty, args->mutex);
+        }
+        // Pushes to the buffer
+        sharedBuffer[sharedBufferIndex++] = p;
+        /* sharedBuffer.push_back(p); */
+        sharedBufferSize ++;
+        /* puts("PUT PACKET TO BUFFER"); */
+        pthread_cond_signal(args->fill);
+        pthread_mutex_unlock(args->mutex);
+    }
+    doneReading = true;
+    pthread_cond_broadcast(args->fill);
+    return 0;
+}
 
 void help() {
     // TODO
@@ -33,60 +112,68 @@ void report(int hits, int processedData, int redundantData) {
     printf("%d redundency detected\n", processedData / (redundantData * 1000000));
 }
 
-PacketData* analyzeFile(FILE * fp) {
+void analyzeFile(FILE * fp, int numThreads) {
     /* Producer that loops through the input file and fills a queue of packets */
+    // TODO either make this into something that can be run in a thread, or call
+    // a thread that reads the file
 
-    // Ignores the first 28 bytes of the file - which are global header
-    // information
-    PacketData * returnData = (PacketData *) malloc(sizeof(PacketData));
-    if (returnData == NULL) {
-        return NULL;
-    }
+    /* Since we might be analyzing multiple files, we want to re-initialize the
+     * global variables to zero
+     */
+    hits = 0;
+    totalRedundantBytes = 0;
+    totalBytesProcessed = 0;
+    sharedBufferIndex = 0;
 
-    // Initialize struct before we start consuming the file
-    returnData->hits = 0;
-    returnData->totalBytesProcessed = 0;
-    returnData->totalRedundantBytes = 0;
+    /* Condition variables and lock */
+    // TODO idk if this breaks for multiple files...
+    pthread_cond_t empty = PTHREAD_COND_INITIALIZER;
+    pthread_cond_t fill  = PTHREAD_COND_INITIALIZER;
+    pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
     /* Jump through the global header of the file */
     check(fseek(fp, 28, SEEK_SET));
-    uint32_t     packetLength;
-    char         packetData[2400];
-    int packetIndex = 0;
 
-    // TODO make this a better data structure
-    // this is just a temporary thing!
-    vector<packet *> packetHolder;
+    // TODO initialize the producer thread and start it...
+    thread_args * producerArgs = (thread_args *) malloc(sizeof(thread_args));
 
+    producerArgs->fp = fp;
+    producerArgs->mutex = &mutex;
+    producerArgs->empty = &empty;
+    producerArgs->fill  = &fill;
+
+    pthread_t producer;
+
+    if (pthread_create(&producer, NULL, producerThread, producerArgs) < 0) {
+        // If the thread creation fails...
+        // Make sure to free the args struct
+        free(producerArgs);
+        ERROR;
+    }
     /* Reads the input file */
     /* We should stream stuff into the buffer and ONLY read in new packets when
      * we can - we should not make the buffer too big due to the memory
      * constraint...
      */
-    while(!feof(fp)) {
-        // Parses out the packets from the file pointer
-        packet * p = parsePacket(fp);
-        // TODO save some info about the packet? ie how large it is? maybe
-        // TODO we should ONLY SAVE THE PACKET if the consumer decides we
-        // should... instead, here, we should simply add the packet to the
-        // buffer
-        packetHolder.push_back(p);
+    pthread_t consumers[numThreads];
 
-        // TODO do some kind of signal to the consumer threads to let them know
-        // there is more data?
+    // Make all the consumers
+    for (int i = 0; i < numThreads; i ++) {
+        if (pthread_create(&consumers[i], NULL, consumerThread, producerArgs) < 0) {
+            free(producerArgs);
+            ERROR;
+        }
     }
 
-    fprintf(stderr, "%f total bytes\n", getTotalData(packetHolder));
-    /* Frees the packets */
-    freePackets(packetHolder);
-}
+    // Wait for producer thread
+    if (pthread_join(producer, NULL) < 0) ERROR;
 
-// TODO make this threadable (single argument)
-void analyzePacket(packet p, packet * packetHolder[30000]) {
-    /* Consumer that gets packets from the queue and analyzes them */
-    // TODO check to see if the hash of the packet is in the hash data structure
-    // TODO if the hash is there, check to see if the data is identical
-    // TODO handle the match / no match
+    for (int i = 0; i < numThreads; i ++) {
+        if (pthread_join(consumers[i], NULL) < 0) ERROR;
+    }
+
+    /* Frees the argument struct */
+    free(producerArgs);
 }
 
 int main(int argc, char * argv[]) {
@@ -119,15 +206,10 @@ int main(int argc, char * argv[]) {
      * we processed, and the total amount of data we saved (total data size of
      * all redundant packets / total data processed)
      */
-    int hits = 0;
-    int RET_STATUS = EXIT_FAILURE;
-
     /* Data (in bytes) */
     // NOTE due to the memory constraints on this program, we cannot save every
     // packet... keep track of this data as we go? might have to store this on
     // some variable that we pass to the threads instead...
-    int processedData = 0;
-    int redundantData = 0;
 
     // TODO: connect these parameters to the logic
     int level = 1;
@@ -151,15 +233,11 @@ int main(int argc, char * argv[]) {
         FILE * inputFile = fopen(argv[i], "r");
         if (inputFile == NULL) ERROR;
         // Get the packet data from the file
-        PacketData * packetData = analyzeFile(inputFile);
-
-        // TODO do something with packet data eg make the report
+        analyzeFile(inputFile, numThreads);
 
         /* Cleanup */
-        free(packetData);
         fclose(inputFile);
     }
 
-    RET_STATUS = EXIT_SUCCESS;
-    return RET_STATUS;
+    return EXIT_SUCCESS;
 }
