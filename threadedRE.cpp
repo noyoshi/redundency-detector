@@ -42,6 +42,7 @@ int packetsReadIn = 0;
 int packetsProcessed = 0;
 bool doneReading = false;
 int sharedBufferSize = 0;
+packet * hashTable[2000] = { NULL };
 
 packet * get() {
     // TODO consider taking this out as it is an extra subroutine call...
@@ -65,6 +66,13 @@ void * consumerThread(void * arg) {
             pthread_cond_wait(args->fill, args->mutex);
         }
         // TODO do something with the packet
+        packet * p = get();
+        printf("pointer -> %d\n", p->hash);
+        if (hashTable[p->hash] == NULL) {
+            hashTable[p->hash] = p;
+        } else {
+            puts("collision");
+        }
         sharedBufferIndex --;
         sharedBufferSize --;
         pthread_cond_signal(args->empty);

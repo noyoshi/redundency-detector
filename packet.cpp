@@ -93,7 +93,7 @@ packet* parsePacket(FILE * fp) {
         p = (packet*) malloc(sizeof(packet));
         if (p == NULL) ERROR;
         check(fread(p->data, 1, dataLength, fp));
-        p->hash = hashData(p->data);
+        p->hash = hashData(p->data) % 2000;
         p->size = packetLength; // TODO is this the correct number?
     } else {
         printf("Skipping %d bytes ahead - packet is wrong size\n", packetLength);
