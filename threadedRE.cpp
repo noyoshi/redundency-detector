@@ -42,12 +42,13 @@ int packetsReadIn = 0;
 int packetsProcessed = 0;
 bool doneReading = false;
 int sharedBufferSize = 0;
-packet * hashTable[2000] = { NULL };
+/* packet **hashTable = new packet*[HASH_TABLE_SIZE]; */
+packet * hashTable[4000] = {NULL};
 
 packet * get() {
     // TODO consider taking this out as it is an extra subroutine call...
     sharedBufferIndex --;
-    printf("%d\n", sharedBufferIndex);
+    printf("sharedBufferIndex -> %d\n", sharedBufferIndex);
     return sharedBuffer[sharedBufferIndex];
 }
 
@@ -66,18 +67,20 @@ void * consumerThread(void * arg) {
         while (!doneReading && sharedBufferSize == 0) {
             pthread_cond_wait(args->fill, args->mutex);
         }
-        // TODO do something with the packet
-        packet * p = get();
-        assert(p != NULL);
-        /* printf("pointer -> %d\n", p->hash); */
-        /* hashTable[p->hash] = p; */
-        if (hashTable[p->hash] == NULL) {
-            hashTable[p->hash] = p;
-        } else {
-            puts("collision");
+        if (sharedBufferIndex > 0) {
+            packet * p = get();
+            assert(p != NULL);
+            /* printf("pointer -> %d\n", p->hash); */
+            /* hashTable[p->hash] = p; */
+            if (hashTable[p->hash] == NULL) {
+                hashTable[p->hash] = p;
+            } else {
+                puts("collision");
+                // TODO full match?
+            }
+            /* sharedBufferIndex --; */
+            sharedBufferSize --;
         }
-        /* sharedBufferIndex --; */
-        sharedBufferSize --;
         pthread_cond_signal(args->empty);
         pthread_mutex_unlock(args->mutex);
     }
@@ -99,10 +102,11 @@ void * producerThread(void * arg) {
             pthread_cond_wait(args->empty, args->mutex);
         }
         // Pushes to the buffer
-        sharedBuffer[sharedBufferIndex] = p;
-        /* sharedBuffer.push_back(p); */
-        sharedBufferSize ++;
-        sharedBufferIndex ++;
+        if (p != NULL) {
+            sharedBuffer[sharedBufferIndex] = p;
+            sharedBufferSize ++;
+            sharedBufferIndex ++;
+        }
         /* puts("PUT PACKET TO BUFFER"); */
         pthread_cond_signal(args->fill);
         pthread_mutex_unlock(args->mutex);
