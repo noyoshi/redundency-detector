@@ -121,8 +121,10 @@ void * producerThread(void * arg) {
 }
 
 /* Prints out a help message if the -h flag, or incorrect flags are given */
-void help() {
-    printf("usage: threadedRE [-t THREADS] [-l LEVEL] file...\n");
+void help(char *progname) {
+    printf("usage: %s [-l LEVEL] [-t THREADS] file ...\n", progname);
+    printf("\t -l LEVEL: set level of redundancy detection (default = 1)\n");
+    printf("\t -t THREADS: # of threads to run (default = 2)\n");
     printf("\tMax threads: 10\n");
     printf("\tLevel 1: Detect redundancy on a whole packet payload basis using a hash function across the packet payload.\n");
     printf("\tLevel 2: Detect redundancy on sub-packet windows (minimum of 64 bytes).\n");
@@ -241,12 +243,14 @@ int main(int argc, char * argv[]) {
     int numThreads = 2; // TODO: change to "optimal" when we know what that is
 
     if(argc == 1){
-        help();
+        help(argv[0]);
     }
     int c;
     // process command line arguments
-    while((c = getopt(argc, argv, "l:t:")) != -1){
+    while((c = getopt(argc, argv, "hl:t:")) != -1){
         switch(c){
+            case 'h':
+                help(argv[0]);
             case 'l':
                 level = atoi(optarg);
                 if(level != 1 && level != 2){
@@ -258,7 +262,7 @@ int main(int argc, char * argv[]) {
                 numThreads = atoi(optarg);
                 break;
             default:
-                help();
+                help(argv[0]);
                 break;
         }
     }
