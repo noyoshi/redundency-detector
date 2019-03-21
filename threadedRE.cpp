@@ -29,7 +29,7 @@ using namespace std;
 
 // 62 MB TODO see how close to 64 MB we can get
 // Should also assume we have a buffer that is max full...
-#define MEMORY_LIMIT 58000000
+#define MEMORY_LIMIT 63900000
 
 // Global mutex / condition variables and file pointer
 typedef struct _thread__arg {
@@ -82,6 +82,11 @@ void addPacketToBuffer(packet * p) {
 
 void addPacketToHashTable(packet * p) {
     /* BEWARE MEMORY LEAKS */
+    // ALSO CHECK TO SEE IF WE ARE OVER MEMORY LIMIT
+    if (dataInMemory >= MEMORY_LIMIT) {
+        freePacket(p);
+        return;
+    }
     hashTable[p->hash] = new list<packet *>;
     hashTable[p->hash]->push_back(p);
 }
