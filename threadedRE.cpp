@@ -41,7 +41,7 @@ typedef struct _thread__arg {
 
 // TODO change buffer size to be larger??? Figure out how this plays into the
 // memory constraint of the assignment...
-int BUFFER_SIZE = 10;
+int BUFFER_SIZE = 15;
 int sharedBufferIndex = 0;
 int hits = 0;
 
@@ -54,7 +54,7 @@ long int numPackets = 0;
 
 bool doneReading = false;
 
-packet * sharedBuffer[10] = { NULL };
+packet * sharedBuffer[15] = { NULL };
 list<packet *> * hashTable[HASHTABLE_SIZE]  = { NULL };
 
 packet * get() {

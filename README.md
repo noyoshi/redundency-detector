@@ -12,6 +12,13 @@ The goal is to write a fast, multi-threaded redundancy detector for pre-captured
 While this project will be a bit prescriptive in terms of the higher level approach (condition variables, pthreads, 
 memory limits), you may elect to use whatever data structures and strategy you deem appropriate to maximize performance.
 
+### TODOS (specific)
+- [ ] Check accuracy for the data compare function
+- [ ] Add a more sophisticated cache eviction policy
+
+Note: the buffer size should be proportional to the number of consumer threads
+we will make, as the more consumer threads means that the less packets will be
+waiting on the buffer, ie we can have a smaller buffer.  
 
 ### TODOs
 - [ ] Detect redundancy on a whole packet payload basis using a hash function across the packet payload.

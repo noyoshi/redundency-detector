@@ -21,7 +21,7 @@ unsigned long hashData(unsigned char *str){
         c = (str[i] == '\0') ? 0 : str[i]; 
         hash = ((hash << 5) + hash) + c;
     }
-    std::cout << "current hash is " << hash << std::endl;
+    printf("current has is %ld\n", hash);
     return hash;
 }
 
