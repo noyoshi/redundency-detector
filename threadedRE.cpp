@@ -33,7 +33,7 @@ typedef struct _thread__arg {
 // TODO change buffer size to be larger??? Figure out how this plays into the
 // memory constraint of the assignment...
 int BUFFER_SIZE = 10;
-packet * sharedBuffer[10];
+packet * sharedBuffer[10] = { NULL };
 int sharedBufferIndex = 0;
 int hits = 0;
 int totalBytesProcessed = 0;
@@ -47,6 +47,7 @@ packet * hashTable[2000] = { NULL };
 packet * get() {
     // TODO consider taking this out as it is an extra subroutine call...
     sharedBufferIndex --;
+    printf("%d\n", sharedBufferIndex);
     return sharedBuffer[sharedBufferIndex];
 }
 
@@ -67,13 +68,15 @@ void * consumerThread(void * arg) {
         }
         // TODO do something with the packet
         packet * p = get();
-        printf("pointer -> %d\n", p->hash);
+        assert(p != NULL);
+        /* printf("pointer -> %d\n", p->hash); */
+        /* hashTable[p->hash] = p; */
         if (hashTable[p->hash] == NULL) {
             hashTable[p->hash] = p;
         } else {
             puts("collision");
         }
-        sharedBufferIndex --;
+        /* sharedBufferIndex --; */
         sharedBufferSize --;
         pthread_cond_signal(args->empty);
         pthread_mutex_unlock(args->mutex);
@@ -96,9 +99,10 @@ void * producerThread(void * arg) {
             pthread_cond_wait(args->empty, args->mutex);
         }
         // Pushes to the buffer
-        sharedBuffer[sharedBufferIndex++] = p;
+        sharedBuffer[sharedBufferIndex] = p;
         /* sharedBuffer.push_back(p); */
         sharedBufferSize ++;
+        sharedBufferIndex ++;
         /* puts("PUT PACKET TO BUFFER"); */
         pthread_cond_signal(args->fill);
         pthread_mutex_unlock(args->mutex);
