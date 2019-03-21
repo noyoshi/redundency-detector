@@ -15,7 +15,7 @@ using namespace std;
 /* djb2 hash */
 unsigned long hashData(unsigned char *str){
     unsigned long hash = 5381;
-    int c;
+    unsigned char c;
     while ((c = *str++)){
         hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
         std::cout << "current hash is " << hash << std::endl;
