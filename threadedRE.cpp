@@ -5,6 +5,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <assert.h>
 
 #include "packet.h"
 #include "debug.h"
@@ -116,9 +117,13 @@ void * producerThread(void * arg) {
     return 0;
 }
 
+/* Prints out a help message if the -h flag, or incorrect flags are given */
 void help() {
-    // TODO
-    /* Prints out a help message if the -h flag, or incorrect flags are given */
+    printf("usage: threadedRE [-t THREADS] [-l LEVEL] file...\n");
+    printf("\tMax threads: 10\n");
+    printf("\tLevel 1: Detect redundancy on a whole packet payload basis using a hash function across the packet payload.\n");
+    printf("\tLevel 2: Detect redundancy on sub-packet windows (minimum of 64 bytes).\n");
+    exit(0);
 }
 
 void report(int hits, int processedData, int redundantData) {
@@ -231,15 +236,25 @@ int main(int argc, char * argv[]) {
     int level = 1;
     int numThreads = 2; // TODO: change to "optimal" when we know what that is
 
+    if(argc == 1){
+        help();
+    }
     int c;
     // process command line arguments
     while((c = getopt(argc, argv, "l:t:")) != -1){
         switch(c){
             case 'l':
                 level = atoi(optarg);
+                if(level != 1 && level != 2){
+                    fprintf(stderr, "Error: invalid level specified");
+                    exit(1);
+                }
                 break;
             case 't':
                 numThreads = atoi(optarg);
+                break;
+            default:
+                help();
                 break;
         }
     }
