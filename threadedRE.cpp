@@ -252,8 +252,6 @@ int main(int argc, char * argv[]) {
         // Get the packet data from the file
         analyzeFile(inputFile);
 
-        // TODO do something with packet data eg make the report
-
         /* Cleanup */
         fclose(inputFile);
     }
