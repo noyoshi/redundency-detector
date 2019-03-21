@@ -90,7 +90,7 @@ packet* parsePacket(FILE * fp) {
         // TODO save the packet to the shared data structure here
         // TODO set something so that the consumer can know that there is
         // some new data to work on
-        p = (packet*) malloc(sizeof(packet));
+        p = (packet*) calloc(1, sizeof(packet));
         if (p == NULL) ERROR;
         check(fread(p->data, 1, dataLength, fp));
         p->hash = (size_t) hashData(p->data) % 2000;
