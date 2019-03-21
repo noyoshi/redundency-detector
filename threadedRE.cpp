@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
-#include <vector>
 #include <pthread.h>
 #include <unistd.h>
 
@@ -31,8 +30,11 @@ typedef struct _thread__arg {
     pthread_cond_t * fill;
 } thread_args;
 
+// TODO change buffer size to be larger??? Figure out how this plays into the
+// memory constraint of the assignment...
 int BUFFER_SIZE = 10;
-vector<packet *> sharedBuffer;
+packet * sharedBuffer[10];
+int sharedBufferIndex = 0;
 int hits = 0;
 int totalBytesProcessed = 0;
 int totalRedundantBytes = 0;
@@ -40,12 +42,11 @@ int packetsReadIn = 0;
 int packetsProcessed = 0;
 bool doneReading = false;
 int sharedBufferSize = 0;
-/* int count = 0; */
 
 packet * get() {
-    packet * p = sharedBuffer.back();
-    sharedBuffer.pop_back();
-    return p;
+    // TODO consider taking this out as it is an extra subroutine call...
+    sharedBufferIndex --;
+    return sharedBuffer[sharedBufferIndex];
 }
 
 void * consumerThread(void * arg) {
@@ -59,25 +60,16 @@ void * consumerThread(void * arg) {
 
     thread_args * args = (thread_args *) arg;
     while (!doneReading || sharedBufferSize > 0) {
-        printf("%d != %d ? %d size = %d\n", packetsReadIn, packetsProcessed, doneReading, sharedBufferSize);
         pthread_mutex_lock(args->mutex);
-        /* if (doneReading && (sharedBufferSize == 0)) { */
-        /*     pthread_mutex_unlock(args->mutex); */
-        /*     return 0; */
-        /* } */
-        puts("in consumer");
-        printf("%d != %d ? %d size = %d\n", packetsReadIn, packetsProcessed, doneReading, sharedBufferSize);
         while (!doneReading && sharedBufferSize == 0) {
             pthread_cond_wait(args->fill, args->mutex);
         }
-
         // TODO do something with the packet
-        sharedBuffer.pop_back();
+        sharedBufferIndex --;
         sharedBufferSize --;
         pthread_cond_signal(args->empty);
         pthread_mutex_unlock(args->mutex);
     }
-    puts("consumer is done!");
     return 0;
 }
 
@@ -96,7 +88,8 @@ void * producerThread(void * arg) {
             pthread_cond_wait(args->empty, args->mutex);
         }
         // Pushes to the buffer
-        sharedBuffer.push_back(p);
+        sharedBuffer[sharedBufferIndex++] = p;
+        /* sharedBuffer.push_back(p); */
         sharedBufferSize ++;
         /* puts("PUT PACKET TO BUFFER"); */
         pthread_cond_signal(args->fill);
@@ -119,7 +112,7 @@ void report(int hits, int processedData, int redundantData) {
     printf("%d redundency detected\n", processedData / (redundantData * 1000000));
 }
 
-void analyzeFile(FILE * fp) {
+void analyzeFile(FILE * fp, int numThreads) {
     /* Producer that loops through the input file and fills a queue of packets */
     // TODO either make this into something that can be run in a thread, or call
     // a thread that reads the file
@@ -130,7 +123,7 @@ void analyzeFile(FILE * fp) {
     hits = 0;
     totalRedundantBytes = 0;
     totalBytesProcessed = 0;
-    sharedBuffer.clear();
+    sharedBufferIndex = 0;
 
     /* Condition variables and lock */
     // TODO idk if this breaks for multiple files...
@@ -162,8 +155,6 @@ void analyzeFile(FILE * fp) {
      * we can - we should not make the buffer too big due to the memory
      * constraint...
      */
-    // TODO initialize the consumer thread(s) and call them...
-    int numThreads = 2;
     pthread_t consumers[numThreads];
 
     // Make all the consumers
@@ -179,14 +170,10 @@ void analyzeFile(FILE * fp) {
 
     for (int i = 0; i < numThreads; i ++) {
         if (pthread_join(consumers[i], NULL) < 0) ERROR;
-        puts("joined a thread!");
-        printf("thread %d of %d done\n", i + 1, numThreads);
     }
-    puts("threads are done!");
 
     /* Frees the argument struct */
     free(producerArgs);
-    debug("done freeing");
 }
 
 int main(int argc, char * argv[]) {
@@ -197,7 +184,6 @@ int main(int argc, char * argv[]) {
      * - Does this hash exist in our data structure?
      * - If yes, then is it an exact match?
      */
-    // TODO input argument parsing
 
     /* For level 2, we want to compute the match over a small window of the data
      * in the packet. If there is a match, then we keep going into the data to
@@ -220,9 +206,6 @@ int main(int argc, char * argv[]) {
      * we processed, and the total amount of data we saved (total data size of
      * all redundant packets / total data processed)
      */
-    int hits = 0;
-    int RET_STATUS = EXIT_FAILURE;
-
     /* Data (in bytes) */
     // NOTE due to the memory constraints on this program, we cannot save every
     // packet... keep track of this data as we go? might have to store this on
@@ -250,13 +233,11 @@ int main(int argc, char * argv[]) {
         FILE * inputFile = fopen(argv[i], "r");
         if (inputFile == NULL) ERROR;
         // Get the packet data from the file
-        analyzeFile(inputFile);
+        analyzeFile(inputFile, numThreads);
 
         /* Cleanup */
         fclose(inputFile);
     }
 
-    RET_STATUS = EXIT_SUCCESS;
-    debug("?");
-    return RET_STATUS;
+    return EXIT_SUCCESS;
 }
