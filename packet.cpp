@@ -96,7 +96,16 @@ packet* parsePacket(FILE * fp) {
         p->size = packetLength; // TODO is this the correct number?
     } else {
         printf("Skipping %d bytes ahead - packet is wrong size\n", packetLength);
-        check(fseek(fp, packetLength, SEEK_CUR));
+
+        // If we fseek past the end of a file and never read, "eof" won't be set
+        // Fix -> do a garbage fread that will set the "eof" if we are past the
+        // end of the file. Otherwise, if the last packet in the file is
+        // something we want to skip, then we will never read and only seek -
+        // this not setting "eof" and never ending the reading loop for the
+        // file.
+        uint32_t garbage;
+        check(fseek(fp, packetLength - 4, SEEK_CUR));
+        check(fread(&garbage, 4, 1, fp));
     }
 
     /* TODO this might not work because if this is ran in a thread...? Weird

@@ -52,6 +52,8 @@ long int maxDataInMemory = 0;
 long int dataInMemory = 0;
 long int numPackets = 0;
 
+int maxListSize = 0;
+
 bool doneReading = false;
 
 packet * sharedBuffer[15] = { NULL };
@@ -126,6 +128,10 @@ void * consumerThread(void * arg) {
                         listPtr->push_back(p);
                     else 
                         freePacket(p);
+                    // TODO remove this hwn we are done testing
+                    if (listPtr->size() > maxListSize) {
+                        maxListSize = listPtr->size();
+                    }
                 } 
                 /* totalRedundantBytes += p->size; */
                 // TODO cache eviction? idk
@@ -144,7 +150,7 @@ void * producerThread(void * arg) {
     thread_args * args = (thread_args *) arg;
 
     // Loop through the file and parse the packets
-    while(!feof(args->fp)) {
+    while(feof(args->fp) == 0) {
         // Parses out the packets from the file pointer
         packet * p = parsePacket(args->fp);
         pthread_mutex_lock(args->mutex);
@@ -252,12 +258,15 @@ void analyzeFile(FILE * fp, int numThreads) {
     }
 
     /* Frees the argument struct */
-    fprintf(stderr, "%.2f MB max used for storage\n", (float) maxDataInMemory / 1000000.0f); 
     REPORT;
     free(threadArgs);
     printf("%ld redundant bytes\n", totalRedundantBytes);
-    fprintf(stderr, "%ld packets processed\n", numPackets);
     freeHashTable();
+
+    /* For development */
+    fprintf(stderr, "%.2f MB max used for storage\n", (float) maxDataInMemory / 1000000.0f); 
+    fprintf(stderr, "%ld packets processed\n", numPackets);
+    fprintf(stderr, "%d is the longest bucket\n", maxListSize);
 }
 
 bool isNumber(char * optarg) {
