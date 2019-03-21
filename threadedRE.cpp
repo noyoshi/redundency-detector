@@ -103,6 +103,7 @@ void * producerThread(void * arg) {
         pthread_mutex_unlock(args->mutex);
     }
     doneReading = true;
+    pthread_cond_broadcast(args->fill);
     return 0;
 }
 
