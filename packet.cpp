@@ -16,7 +16,7 @@ using namespace std;
 unsigned long hashData(unsigned char *str){
     unsigned long hash = 5381;
     int c; 
-    
+
     for (int i = 0; i < 2000; i++){
         c = (str[i] == '\0') ? 0 : str[i]; 
         hash = ((hash << 5) + hash) + c;
@@ -25,45 +25,33 @@ unsigned long hashData(unsigned char *str){
     return hash;
 }
 
-bool checkContent(packet* p1, packet* p2, bool level = 1) {
-    /* Checks the actual content of the packet with the stored packet to confirm a match. 
-     * You will want to use memcmp, not strcmp as everything in the files is binary content. 
+bool checkContent(packet* p1, packet* p2, int level = 1) {
+    /* Checks the actual content of the packet with the stored packet to confirm a match.
+     * You will want to use memcmp, not strcmp as everything in the files is binary content.
      */
 
-	// Stage 1: Compare Whole Data Arrays
-	if (level == 1){
-		if (memcmp(p1->data, p2->data, sizeof(p1->data)) == 0){
-			return true;
-		}
-		else{
-			return false;
-		}
-	}
-	// Stage 2: Jump Through Arrays in Chunks
-	else if (level == 2){
-		// for (int i = 0; i < 2400; ++i){
-
-		// }
-	}
-
-	return false;
-}
-
-void freePackets(vector<packet *> packetHolder) {
-    /* Frees the packets in the packet holder */
-    for (size_t i = 0; i < packetHolder.size(); i ++) {
-        if (packetHolder[i] != NULL) free(packetHolder[i]);
-    }
-}
-
-float getTotalData(vector<packet *> packetHolder) {
-    float totalSize = 0;
-    for (int i = 0; i < 30000; i ++) {
-        if (packetHolder[i] != NULL) {
-            totalSize += packetHolder[i]->size;
+    // Stage 1: Compare Whole Data Arrays
+    if (level == 1){
+        if (memcmp(p1->data, p2->data, sizeof(p1->data)) == 0){
+            return true;
+        }
+        else{
+            return false;
         }
     }
-    return totalSize / 1000000;
+    // Stage 2: Jump Through Arrays in Chunks
+    else if (level == 2){
+        // for (int i = 0; i < 2400; ++i){
+
+        // }
+    }
+
+    return false;
+}
+
+void freePackets() {
+    /* Frees the packets in the packet holder */
+    // TODO free the packets!
 }
 
 packet* parsePacket(FILE * fp) {
@@ -91,7 +79,7 @@ packet* parsePacket(FILE * fp) {
         // We want to skip the first 52 bytes of the packer per the instructions
         check(fseek(fp, 52, SEEK_CUR));
         int dataLength = packetLength - 52;
-        // packetData contains the byte data we care about 
+        // packetData contains the byte data we care about
         // TODO intialize a new packet data structure here
         // TODO save the packet to the shared data structure here
         // TODO set something so that the consumer can know that there is

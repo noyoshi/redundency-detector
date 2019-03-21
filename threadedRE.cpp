@@ -43,7 +43,7 @@ int packetsProcessed = 0;
 bool doneReading = false;
 int sharedBufferSize = 0;
 /* packet **hashTable = new packet*[HASH_TABLE_SIZE]; */
-packet * hashTable[4000] = {NULL};
+packet * hashTable[4000] = { NULL };
 
 packet * get() {
     // TODO consider taking this out as it is an extra subroutine call...
@@ -76,6 +76,8 @@ void * consumerThread(void * arg) {
                 hashTable[p->hash] = p;
             } else {
                 puts("collision");
+                hits ++;
+                totalRedundantBytes += p->size;
                 // TODO full match?
             }
             /* sharedBufferIndex --; */
@@ -106,6 +108,7 @@ void * producerThread(void * arg) {
             sharedBuffer[sharedBufferIndex] = p;
             sharedBufferSize ++;
             sharedBufferIndex ++;
+            totalBytesProcessed += p->size;
         }
         /* puts("PUT PACKET TO BUFFER"); */
         pthread_cond_signal(args->fill);
@@ -121,11 +124,11 @@ void help() {
     /* Prints out a help message if the -h flag, or incorrect flags are given */
 }
 
-void report(int hits, int processedData, int redundantData) {
+void report() {
     /* Generates report for the program */
-    printf("%d bytes processed\n", processedData);
+    printf("%d bytes processed\n", totalBytesProcessed);
     printf("%d hits\n", hits);
-    printf("%d redundency detected\n", processedData / (redundantData * 1000000));
+    printf("%d redundency detected\n", (totalRedundantBytes * 100) / totalBytesProcessed);
 }
 
 void analyzeFile(FILE * fp, int numThreads) {
@@ -189,6 +192,7 @@ void analyzeFile(FILE * fp, int numThreads) {
     }
 
     /* Frees the argument struct */
+    report();
     free(producerArgs);
 }
 

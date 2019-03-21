@@ -10,10 +10,9 @@ typedef struct _packet {
     uint32_t        size; /* Size of the packet */
 } packet;
 
-unsigned long hashData(unsigned char[2400]); 
-bool checkHash(int, std::vector<packet *>); 
-bool checkContent(); 
+unsigned long hashData(unsigned char*); 
+bool checkContent(packet *, packet *, int); 
 float getTotalData(std::vector<packet *>);
 
-void freePackets(std::vector<packet *>); 
+void freePackets(); 
 packet* parsePacket(FILE *);
