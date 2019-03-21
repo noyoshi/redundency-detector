@@ -5,7 +5,9 @@
 #include <string.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include <assert.h>
+#include <ctype.h>
 
 #include "packet.h"
 #include "debug.h"
@@ -18,33 +20,33 @@ using namespace std;
  * consumer encounters a redundant packet
  */
 
-typedef struct _data {
-    int hits;
-    int totalBytesProcessed;
-    int totalRedundantBytes;
-} PacketData;
+/* Generates a report */
+#define REPORT \
+    { printf("%ld bytes processed\n%d hits\n%ld redundency detected\n", \
+        totalBytesProcessed, hits, (totalRedundantBytes * 100) / totalBytesProcessed);} \
 
+// Global mutex / condition variables and file pointer
 typedef struct _thread__arg {
     FILE * fp;
     pthread_mutex_t * mutex;
-    pthread_cond_t * empty;
-    pthread_cond_t * fill;
+    pthread_cond_t  * empty;
+    pthread_cond_t  * fill;
 } thread_args;
 
 // TODO change buffer size to be larger??? Figure out how this plays into the
 // memory constraint of the assignment...
 int BUFFER_SIZE = 10;
-packet * sharedBuffer[10] = { NULL };
 int sharedBufferIndex = 0;
 int hits = 0;
-int totalBytesProcessed = 0;
-int totalRedundantBytes = 0;
-int packetsReadIn = 0;
-int packetsProcessed = 0;
+
+long int totalBytesProcessed = 0;
+long int totalRedundantBytes = 0;
+long int packetsProcessed    = 0;
+
 bool doneReading = false;
-int sharedBufferSize = 0;
-/* packet **hashTable = new packet*[HASH_TABLE_SIZE]; */
-packet * hashTable[4000] = { NULL };
+
+packet * sharedBuffer[10] = { NULL };
+packet * hashTable[4000]  = { NULL };
 
 packet * get() {
     // TODO consider taking this out as it is an extra subroutine call...
@@ -63,26 +65,25 @@ void * consumerThread(void * arg) {
     // TODO handle the match / no match
 
     thread_args * args = (thread_args *) arg;
-    while (!doneReading || sharedBufferSize > 0) {
+    while (!doneReading || sharedBufferIndex > 0) {
         pthread_mutex_lock(args->mutex);
-        while (!doneReading && sharedBufferSize == 0) {
+        // Spin
+        while (!doneReading && sharedBufferIndex == 0) {
             pthread_cond_wait(args->fill, args->mutex);
         }
         if (sharedBufferIndex > 0) {
             packet * p = get();
             assert(p != NULL);
-            /* printf("pointer -> %d\n", p->hash); */
-            /* hashTable[p->hash] = p; */
             if (hashTable[p->hash] == NULL) {
                 hashTable[p->hash] = p;
             } else {
                 puts("collision");
                 hits ++;
                 totalRedundantBytes += p->size;
+                // TODO cache eviction? idk
+                free(p);
                 // TODO full match?
             }
-            /* sharedBufferIndex --; */
-            sharedBufferSize --;
         }
         pthread_cond_signal(args->empty);
         pthread_mutex_unlock(args->mutex);
@@ -100,18 +101,14 @@ void * producerThread(void * arg) {
         packet * p = parsePacket(args->fp);
         pthread_mutex_lock(args->mutex);
         // Wait while the buffer is full...
-        // THIS MIGHT NOT WORK! TODO CHECK
-        while (sharedBufferSize == BUFFER_SIZE) {
+        while (sharedBufferIndex == BUFFER_SIZE)
             pthread_cond_wait(args->empty, args->mutex);
-        }
+
         // Pushes to the buffer
         if (p != NULL) {
-            sharedBuffer[sharedBufferIndex] = p;
-            sharedBufferSize ++;
-            sharedBufferIndex ++;
+            sharedBuffer[sharedBufferIndex++] = p;
             totalBytesProcessed += p->size;
         }
-        /* puts("PUT PACKET TO BUFFER"); */
         pthread_cond_signal(args->fill);
         pthread_mutex_unlock(args->mutex);
     }
@@ -131,11 +128,9 @@ void help(char *progname) {
     exit(0);
 }
 
-void report() {
-    /* Generates report for the program */
-    printf("%d bytes processed\n", totalBytesProcessed);
-    printf("%d hits\n", hits);
-    printf("%d redundency detected\n", (totalRedundantBytes * 100) / totalBytesProcessed);
+void freeHashTable() {
+    for (size_t i = 0; i < 4000; i ++)
+        if (hashTable[i] != NULL) free(hashTable[i]);
 }
 
 void analyzeFile(FILE * fp, int numThreads) {
@@ -153,27 +148,28 @@ void analyzeFile(FILE * fp, int numThreads) {
 
     /* Condition variables and lock */
     // TODO idk if this breaks for multiple files...
-    pthread_cond_t empty = PTHREAD_COND_INITIALIZER;
-    pthread_cond_t fill  = PTHREAD_COND_INITIALIZER;
+    pthread_cond_t empty  = PTHREAD_COND_INITIALIZER;
+    pthread_cond_t fill   = PTHREAD_COND_INITIALIZER;
     pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
     /* Jump through the global header of the file */
     check(fseek(fp, 28, SEEK_SET));
 
-    // TODO initialize the producer thread and start it...
-    thread_args * producerArgs = (thread_args *) malloc(sizeof(thread_args));
+    // Initializes a struct to hold arguments for the producer
+    thread_args * threadArgs = (thread_args *) malloc(sizeof(thread_args));
 
-    producerArgs->fp = fp;
-    producerArgs->mutex = &mutex;
-    producerArgs->empty = &empty;
-    producerArgs->fill  = &fill;
+    threadArgs->fp = fp;
+    threadArgs->mutex = &mutex;
+    threadArgs->empty = &empty;
+    threadArgs->fill  = &fill;
 
+    // Creates the producer thread
     pthread_t producer;
 
-    if (pthread_create(&producer, NULL, producerThread, producerArgs) < 0) {
+    if (pthread_create(&producer, NULL, producerThread, threadArgs) < 0) {
         // If the thread creation fails...
         // Make sure to free the args struct
-        free(producerArgs);
+        free(threadArgs);
         ERROR;
     }
     /* Reads the input file */
@@ -184,23 +180,35 @@ void analyzeFile(FILE * fp, int numThreads) {
     pthread_t consumers[numThreads];
 
     // Make all the consumers
-    for (int i = 0; i < numThreads; i ++) {
-        if (pthread_create(&consumers[i], NULL, consumerThread, producerArgs) < 0) {
-            free(producerArgs);
+    for (size_t i = 0; i < numThreads; i ++) {
+        if (pthread_create(&consumers[i], NULL, consumerThread, threadArgs) < 0) {
+            free(threadArgs);
             ERROR;
         }
     }
 
     // Wait for producer thread
-    if (pthread_join(producer, NULL) < 0) ERROR;
+    if (pthread_join(producer, NULL) < 0) 
+        ERROR;
 
-    for (int i = 0; i < numThreads; i ++) {
+    for (size_t i = 0; i < numThreads; i ++) {
         if (pthread_join(consumers[i], NULL) < 0) ERROR;
     }
 
     /* Frees the argument struct */
-    report();
-    free(producerArgs);
+    REPORT;
+    free(threadArgs);
+    printf("%ld redundant bytes\n", totalRedundantBytes);
+    freeHashTable();
+}
+
+bool isNumber(char * optarg) {
+    /* Ensures that the optional argument (c-string) is a number) */
+    char c;
+    while ((c = *optarg++)) {
+        if (!isdigit(c)) return false;
+    }
+    return true;
 }
 
 int main(int argc, char * argv[]) {
@@ -238,20 +246,22 @@ int main(int argc, char * argv[]) {
     // packet... keep track of this data as we go? might have to store this on
     // some variable that we pass to the threads instead...
 
+    // TODO keep track of the size of the data structures we are using (more
+    // like, how many packets are we putting on the heap?)
     // TODO: connect these parameters to the logic
     int level = 1;
     int numThreads = 2; // TODO: change to "optimal" when we know what that is
-
-    if(argc == 1){
-        help(argv[0]);
-    }
     int c;
+
+    if(argc == 1) help(argv[0]);
+
     // process command line arguments
     while((c = getopt(argc, argv, "hl:t:")) != -1){
         switch(c){
             case 'h':
                 help(argv[0]);
             case 'l':
+                if (!isNumber(optarg)) help(argv[0]);
                 level = atoi(optarg);
                 if(level != 1 && level != 2){
                     fprintf(stderr, "Error: invalid level specified");
@@ -259,6 +269,7 @@ int main(int argc, char * argv[]) {
                 }
                 break;
             case 't':
+                if (!isNumber(optarg)) help(argv[0]);
                 numThreads = atoi(optarg);
                 break;
             default:
@@ -268,7 +279,7 @@ int main(int argc, char * argv[]) {
     }
 
     // process files remaining in command line arguments
-    for(int i = optind; i < argc; i++){
+    for(size_t i = optind; i < argc; i++){
         FILE * inputFile = fopen(argv[i], "r");
         if (inputFile == NULL) ERROR;
         // Get the packet data from the file
