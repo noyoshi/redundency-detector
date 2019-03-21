@@ -23,13 +23,28 @@ unsigned long hashData(unsigned char *str){
     return hash;
 }
 
-bool checkContent() {
-    /* Checks the actual content of the packet with the stored packet to confirm
-     * a match. 
-     * You will want to use memcmp, not strcmp as everything in the files is
-     * binary content. 
+bool checkContent(packet* p1, packet* p2, bool level = 1) {
+    /* Checks the actual content of the packet with the stored packet to confirm a match. 
+     * You will want to use memcmp, not strcmp as everything in the files is binary content. 
      */
-    return false;
+
+	// Stage 1: Compare Whole Data Arrays
+	if (level == 1){
+		if (memcmp(p1->data, p2->data, sizeof(p1->data)) == 0){
+			return true;
+		}
+		else{
+			return false;
+		}
+	}
+	// Stage 2: Jump Through Arrays in Chunks
+	else if (level == 2){
+		// for (int i = 0; i < 2400; ++i){
+
+		// }
+	}
+
+	return false;
 }
 
 void freePackets(vector<packet *> packetHolder) {
