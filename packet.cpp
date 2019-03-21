@@ -18,20 +18,9 @@ unsigned long hashData(unsigned char *str){
     int c;
     while ((c = *str++)){
         hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-        std::cout << "current hash is " << hash << std::endl;
     }
+    std::cout << "current hash is " << hash << std::endl;
     return hash;
-}
-
-bool checkHash(unsigned long hash, vector<packet *> packetHolder) {
-    
-    for (auto u : packetHolder){
-        if (hash == hashData(u->data)){
-            return true;
-        }
-    }
-
-    return false;
 }
 
 bool checkContent() {
@@ -93,7 +82,7 @@ packet* parsePacket(FILE * fp) {
         p = (packet*) calloc(1, sizeof(packet));
         if (p == NULL) ERROR;
         check(fread(p->data, 1, dataLength, fp));
-        p->hash = (size_t) hashData(p->data) % 2000;
+        p->hash =  hashData(p->data) % 4000;
         p->size = packetLength; // TODO is this the correct number?
     } else {
         printf("Skipping %d bytes ahead - packet is wrong size\n", packetLength);
