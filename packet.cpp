@@ -15,14 +15,10 @@ using namespace std;
 /* djb2 hash */
 unsigned long hashData(unsigned char *str){
     unsigned long hash = 5381;
-    int c;
-    /*
-    while ((c = *str++)){
-        hash = ((hash << 5) + hash) + c;  hash * 33 + c 
-    }*/
+    int c; 
     
     for (int i = 0; i < 2000; i++){
-        c = (str[i] == NULL) ? 0 : str[i]; 
+        c = (str[i] == '\0') ? 0 : str[i]; 
         hash = ((hash << 5) + hash) + c;
     }
     printf("hash is %lu\n", hash);
