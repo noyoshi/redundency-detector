@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "packet.h"
-#include "debug.h"
+#include "config.h"
 
 using namespace std;
 
@@ -17,7 +17,7 @@ unsigned long hashData(unsigned char *str){
     unsigned long hash = 5381;
     int c; 
 
-    for (int i = 0; i < 2000; i++){
+    for (int i = 0; i < DATA_SIZE; i++){
         c = (str[i] == '\0') ? 0 : str[i]; 
         hash = ((hash << 5) + hash) + c;
     }
@@ -25,14 +25,16 @@ unsigned long hashData(unsigned char *str){
     return hash;
 }
 
-bool checkContent(packet* p1, packet* p2, int level = 1) {
+bool checkContent(packet* p1, packet* p2, int level) {
     /* Checks the actual content of the packet with the stored packet to confirm a match.
      * You will want to use memcmp, not strcmp as everything in the files is binary content.
      */
+    // NOTE this is only returning true once... not sure if that is correct?
+    // TODO chck accuracy
 
     // Stage 1: Compare Whole Data Arrays
     if (level == 1){
-        if (memcmp(p1->data, p2->data, sizeof(p1->data)) == 0){
+        if (memcmp(p1->data, p2->data, DATA_SIZE) == 0){
             return true;
         }
         else{
@@ -66,6 +68,9 @@ packet* parsePacket(FILE * fp) {
     /* Skip the ts_usec field */
     check(fseek(fp, 4, SEEK_CUR));
 
+    // Instead of the above?
+    /* check(fseek(fp, 8, SEEK_CUR)); */
+
     /* Read in the incl_len field */
     check(fread(&packetLength, 4, 1, fp));
 
@@ -73,7 +78,7 @@ packet* parsePacket(FILE * fp) {
     check(fseek(fp, 4, SEEK_CUR));
 
     /* Let’s do a sanity check before reading */
-    if(packetLength < 2400 && packetLength > 128) {
+    if(packetLength < DATA_SIZE && packetLength > 128) {
         printf("Packet length was %d\n", packetLength);
         /* Might not be a bad idea to pay attention to this return value */
         // We want to skip the first 52 bytes of the packer per the instructions
@@ -87,7 +92,7 @@ packet* parsePacket(FILE * fp) {
         p = (packet*) calloc(1, sizeof(packet));
         if (p == NULL) ERROR;
         check(fread(p->data, 1, dataLength, fp));
-        p->hash =  hashData(p->data) % 4000;
+        p->hash =  hashData(p->data) % HASHTABLE_SIZE;
         p->size = packetLength; // TODO is this the correct number?
     } else {
         printf("Skipping %d bytes ahead - packet is wrong size\n", packetLength);

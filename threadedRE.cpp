@@ -8,10 +8,12 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <ctype.h>
+#include <list>
 
 #include "packet.h"
-#include "debug.h"
+#include "config.h"
 #include "unistd.h"
+
 
 using namespace std;
 
@@ -24,6 +26,10 @@ using namespace std;
 #define REPORT \
     { printf("%ld bytes processed\n%d hits\n%ld redundency detected\n", \
         totalBytesProcessed, hits, (totalRedundantBytes * 100) / totalBytesProcessed);} \
+
+// 62 MB TODO see how close to 64 MB we can get
+// Should also assume we have a buffer that is max full...
+#define MEMORY_LIMIT 58000000
 
 // Global mutex / condition variables and file pointer
 typedef struct _thread__arg {
@@ -42,17 +48,40 @@ int hits = 0;
 long int totalBytesProcessed = 0;
 long int totalRedundantBytes = 0;
 long int packetsProcessed    = 0;
+long int maxDataInMemory = 0;
+long int dataInMemory = 0;
+long int numPackets = 0;
 
 bool doneReading = false;
 
 packet * sharedBuffer[10] = { NULL };
-packet * hashTable[4000]  = { NULL };
+list<packet *> * hashTable[HASHTABLE_SIZE]  = { NULL };
 
 packet * get() {
     // TODO consider taking this out as it is an extra subroutine call...
     sharedBufferIndex --;
     printf("sharedBufferIndex -> %d\n", sharedBufferIndex);
     return sharedBuffer[sharedBufferIndex];
+}
+
+void freePacket(packet * p) {
+    dataInMemory -= sizeof(packet);
+    free(p);
+}
+
+void addPacketToBuffer(packet * p) {
+    sharedBuffer[sharedBufferIndex++] = p;
+    totalBytesProcessed += p->size;
+    dataInMemory += sizeof(packet);
+    numPackets += 1;
+    if (dataInMemory > maxDataInMemory) 
+        maxDataInMemory = dataInMemory;
+}
+
+void addPacketToHashTable(packet * p) {
+    /* BEWARE MEMORY LEAKS */
+    hashTable[p->hash] = new list<packet *>;
+    hashTable[p->hash]->push_back(p);
 }
 
 void * consumerThread(void * arg) {
@@ -74,14 +103,33 @@ void * consumerThread(void * arg) {
         if (sharedBufferIndex > 0) {
             packet * p = get();
             assert(p != NULL);
-            if (hashTable[p->hash] == NULL) {
-                hashTable[p->hash] = p;
+            list<packet *> * listPtr = hashTable[p->hash];
+            if (listPtr == NULL) {
+                addPacketToHashTable(p);
             } else {
                 puts("collision");
-                hits ++;
-                totalRedundantBytes += p->size;
+                bool foundMatch = false;
+                for (list<packet *>::iterator it = listPtr->begin(); it != listPtr->end(); it ++) {
+                    if (checkContent(*it, p, 1)) {
+                        // Found redundant data
+                        totalRedundantBytes += p->size;
+                        foundMatch = true;
+                        hits ++;
+                        freePacket(p); 
+                        break;
+                    }
+                }
+                if (!foundMatch) {
+                    // If we did not find an exact match, add the packet to the
+                    // bucket IF WE HAVE NOT GOTTEN TO MEMORY LIMIT
+                    if (dataInMemory <= MEMORY_LIMIT)
+                        listPtr->push_back(p);
+                    else 
+                        freePacket(p);
+                } 
+                /* totalRedundantBytes += p->size; */
                 // TODO cache eviction? idk
-                free(p);
+                /* freePacket(p); */
                 // TODO full match?
             }
         }
@@ -105,10 +153,9 @@ void * producerThread(void * arg) {
             pthread_cond_wait(args->empty, args->mutex);
 
         // Pushes to the buffer
-        if (p != NULL) {
-            sharedBuffer[sharedBufferIndex++] = p;
-            totalBytesProcessed += p->size;
-        }
+        if (p != NULL) 
+            addPacketToBuffer(p);
+
         pthread_cond_signal(args->fill);
         pthread_mutex_unlock(args->mutex);
     }
@@ -129,8 +176,17 @@ void help(char *progname) {
 }
 
 void freeHashTable() {
-    for (size_t i = 0; i < 4000; i ++)
-        if (hashTable[i] != NULL) free(hashTable[i]);
+    for (size_t i = 0; i < HASHTABLE_SIZE; i ++) {
+        if (hashTable[i] != NULL) {
+            // Free all packets in the bucket
+            for (list<packet *>::iterator it = hashTable[i]->begin(); it != hashTable[i]->end(); it ++) {
+                free(*it);
+            }
+            // Frees the bucket
+            free(hashTable[i]);
+            hashTable[i] = NULL;
+        }
+    }
 }
 
 void analyzeFile(FILE * fp, int numThreads) {
@@ -188,7 +244,7 @@ void analyzeFile(FILE * fp, int numThreads) {
     }
 
     // Wait for producer thread
-    if (pthread_join(producer, NULL) < 0) 
+    if (pthread_join(producer, NULL) < 0)
         ERROR;
 
     for (size_t i = 0; i < numThreads; i ++) {
@@ -196,9 +252,11 @@ void analyzeFile(FILE * fp, int numThreads) {
     }
 
     /* Frees the argument struct */
+    fprintf(stderr, "%.2f MB max used for storage\n", (float) maxDataInMemory / 1000000.0f); 
     REPORT;
     free(threadArgs);
     printf("%ld redundant bytes\n", totalRedundantBytes);
+    fprintf(stderr, "%ld packets processed\n", numPackets);
     freeHashTable();
 }
 
