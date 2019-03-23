@@ -13,15 +13,15 @@ using namespace std;
 
 /* Hashes the given data and returns the hashed data */
 /* djb2 hash */
-unsigned long hashData(unsigned char *str){
-    unsigned long hash = 5381;
+unsigned long long hashData(unsigned char *str){
+    unsigned long long hash = 5381;
     int c; 
 
     for (int i = 0; i < DATA_SIZE; i++){
         c = (str[i] == '\0') ? 0 : str[i]; 
         hash = ((hash << 5) + hash) + c;
     }
-    printf("current has is %ld\n", hash);
+    printf("current hash is %llu\n", hash);
     return hash;
 }
 
@@ -32,12 +32,11 @@ bool checkContent(packet* p1, packet* p2, int level) {
     // NOTE this is only returning true once... not sure if that is correct?
     // TODO chck accuracy
 
-    // Stage 1: Compare Whole Data Arrays
+    // Stage 1: Compare Whole Data Arrays 
     if (level == 1){
-        if (memcmp(p1->data, p2->data, DATA_SIZE) == 0){
+        if (memcmp(&p1->data, &p2->data, DATA_SIZE) == 0){
             return true;
-        }
-        else{
+        } else {
             return false;
         }
     }
@@ -96,7 +95,16 @@ packet* parsePacket(FILE * fp) {
         p->size = packetLength; // TODO is this the correct number?
     } else {
         printf("Skipping %d bytes ahead - packet is wrong size\n", packetLength);
-        check(fseek(fp, packetLength, SEEK_CUR));
+
+        // If we fseek past the end of a file and never read, "eof" won't be set
+        // Fix -> do a garbage fread that will set the "eof" if we are past the
+        // end of the file. Otherwise, if the last packet in the file is
+        // something we want to skip, then we will never read and only seek -
+        // this not setting "eof" and never ending the reading loop for the
+        // file.
+        uint32_t garbage;
+        check(fseek(fp, packetLength - 4, SEEK_CUR));
+        check(fread(&garbage, 4, 1, fp));
     }
 
     /* TODO this might not work because if this is ran in a thread...? Weird

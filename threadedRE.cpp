@@ -29,7 +29,7 @@ using namespace std;
 
 // 62 MB TODO see how close to 64 MB we can get
 // Should also assume we have a buffer that is max full...
-#define MEMORY_LIMIT 58000000
+#define MEMORY_LIMIT 63900000
 
 // Global mutex / condition variables and file pointer
 typedef struct _thread__arg {
@@ -51,6 +51,8 @@ long int packetsProcessed    = 0;
 long int maxDataInMemory = 0;
 long int dataInMemory = 0;
 long int numPackets = 0;
+
+int maxListSize = 0;
 
 bool doneReading = false;
 
@@ -80,6 +82,11 @@ void addPacketToBuffer(packet * p) {
 
 void addPacketToHashTable(packet * p) {
     /* BEWARE MEMORY LEAKS */
+    // ALSO CHECK TO SEE IF WE ARE OVER MEMORY LIMIT
+    if (dataInMemory >= MEMORY_LIMIT) {
+        freePacket(p);
+        return;
+    }
     hashTable[p->hash] = new list<packet *>;
     hashTable[p->hash]->push_back(p);
 }
@@ -126,6 +133,10 @@ void * consumerThread(void * arg) {
                         listPtr->push_back(p);
                     else 
                         freePacket(p);
+                    // TODO remove this hwn we are done testing
+                    if (listPtr->size() > maxListSize) {
+                        maxListSize = listPtr->size();
+                    }
                 } 
                 /* totalRedundantBytes += p->size; */
                 // TODO cache eviction? idk
@@ -144,7 +155,7 @@ void * producerThread(void * arg) {
     thread_args * args = (thread_args *) arg;
 
     // Loop through the file and parse the packets
-    while(!feof(args->fp)) {
+    while(feof(args->fp) == 0) {
         // Parses out the packets from the file pointer
         packet * p = parsePacket(args->fp);
         pthread_mutex_lock(args->mutex);
@@ -201,6 +212,9 @@ void analyzeFile(FILE * fp, int numThreads) {
     totalRedundantBytes = 0;
     totalBytesProcessed = 0;
     sharedBufferIndex = 0;
+    doneReading = false;
+    sharedBufferIndex = 0;
+    numPackets = 0;
 
     /* Condition variables and lock */
     // TODO idk if this breaks for multiple files...
@@ -252,12 +266,14 @@ void analyzeFile(FILE * fp, int numThreads) {
     }
 
     /* Frees the argument struct */
-    fprintf(stderr, "%.2f MB max used for storage\n", (float) maxDataInMemory / 1000000.0f); 
     REPORT;
     free(threadArgs);
     printf("%ld redundant bytes\n", totalRedundantBytes);
+
+    /* For development */
+    fprintf(stderr, "%.2f MB max used for storage\n", (float) maxDataInMemory / 1000000.0f); 
     fprintf(stderr, "%ld packets processed\n", numPackets);
-    freeHashTable();
+    fprintf(stderr, "%d is the longest bucket\n", maxListSize);
 }
 
 bool isNumber(char * optarg) {
@@ -339,6 +355,7 @@ int main(int argc, char * argv[]) {
     // process files remaining in command line arguments
     for(size_t i = optind; i < argc; i++){
         FILE * inputFile = fopen(argv[i], "r");
+        fprintf(stderr, "Analyzing file\n");
         if (inputFile == NULL) ERROR;
         // Get the packet data from the file
         analyzeFile(inputFile, numThreads);
@@ -346,6 +363,7 @@ int main(int argc, char * argv[]) {
         /* Cleanup */
         fclose(inputFile);
     }
+    freeHashTable();
 
     return EXIT_SUCCESS;
 }
