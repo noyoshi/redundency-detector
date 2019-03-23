@@ -57,6 +57,7 @@ int maxListSize = 0;
 bool doneReading = false;
 
 packet * sharedBuffer[15] = { NULL };
+// TODO change this to be a linear probing hash table! it is faster...
 list<packet *> * hashTable[HASHTABLE_SIZE]  = { NULL };
 
 packet * get() {

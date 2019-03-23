@@ -13,15 +13,18 @@ While this project will be a bit prescriptive in terms of the higher level appro
 memory limits), you may elect to use whatever data structures and strategy you deem appropriate to maximize performance.
 
 ### TODOS (specific)
-- [ ] Check accuracy for the data compare function
+- [x] Check accuracy for the data compare function
 - [ ] Add a more sophisticated cache eviction policy
+- [ ] Evaluate linear probing as a possible hash table implementation
+- [ ] Benchmark each build
+- [ ] Make sure that as few things as possible are being passed by value
 
 Note: the buffer size should be proportional to the number of consumer threads
 we will make, as the more consumer threads means that the less packets will be
 waiting on the buffer, ie we can have a smaller buffer.  
 
 ### TODOs
-- [ ] Detect redundancy on a whole packet payload basis using a hash function across the packet payload.
+- [x] Detect redundancy on a whole packet payload basis using a hash function across the packet payload.
 - [ ] Detect redundancy on sub-packet windows (minimum of 64 bytes).
 
 ### Specifications 

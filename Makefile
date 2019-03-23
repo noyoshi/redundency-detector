@@ -1,12 +1,17 @@
-CFLAGS=-Wall -g -c
+CFLAGS=-Wall -g -O3
 
 all: threadedRE
 
 threadedRE: packet.o threadedRE.cpp
-	g++ packet.o threadedRE.cpp -o threadedRE -lpthread
+	g++ $(CFLAGS) packet.o threadedRE.cpp -o threadedRE -lpthread
 
 packet.o: packet.cpp
-	g++ $(CFLAGS) packet.cpp -o packet.o
+	g++ $(CFLAGS) -c packet.cpp -o packet.o
 
 clean:
 	rm threadedRE packet.o
+
+optimize: packet.cpp threadedRE.cpp
+	g++ $(CFLAGS) -c packet.cpp -o packet.o
+	g++ $(CFLAGS) packet.o threadedRE.cpp -o optimized -lpthread
+
