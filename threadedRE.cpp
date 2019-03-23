@@ -212,6 +212,9 @@ void analyzeFile(FILE * fp, int numThreads) {
     totalRedundantBytes = 0;
     totalBytesProcessed = 0;
     sharedBufferIndex = 0;
+    doneReading = false;
+    sharedBufferIndex = 0;
+    numPackets = 0;
 
     /* Condition variables and lock */
     // TODO idk if this breaks for multiple files...
@@ -266,7 +269,6 @@ void analyzeFile(FILE * fp, int numThreads) {
     REPORT;
     free(threadArgs);
     printf("%ld redundant bytes\n", totalRedundantBytes);
-    freeHashTable();
 
     /* For development */
     fprintf(stderr, "%.2f MB max used for storage\n", (float) maxDataInMemory / 1000000.0f); 
@@ -353,6 +355,7 @@ int main(int argc, char * argv[]) {
     // process files remaining in command line arguments
     for(size_t i = optind; i < argc; i++){
         FILE * inputFile = fopen(argv[i], "r");
+        fprintf(stderr, "Analyzing file\n");
         if (inputFile == NULL) ERROR;
         // Get the packet data from the file
         analyzeFile(inputFile, numThreads);
@@ -360,6 +363,7 @@ int main(int argc, char * argv[]) {
         /* Cleanup */
         fclose(inputFile);
     }
+    freeHashTable();
 
     return EXIT_SUCCESS;
 }

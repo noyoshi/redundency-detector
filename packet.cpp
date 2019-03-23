@@ -13,15 +13,15 @@ using namespace std;
 
 /* Hashes the given data and returns the hashed data */
 /* djb2 hash */
-unsigned long hashData(unsigned char *str){
-    unsigned long hash = 5381;
+unsigned long long hashData(unsigned char *str){
+    unsigned long long hash = 5381;
     int c; 
 
     for (int i = 0; i < DATA_SIZE; i++){
         c = (str[i] == '\0') ? 0 : str[i]; 
         hash = ((hash << 5) + hash) + c;
     }
-    printf("current has is %ld\n", hash);
+    printf("current hash is %llu\n", hash);
     return hash;
 }
 
@@ -32,12 +32,11 @@ bool checkContent(packet* p1, packet* p2, int level) {
     // NOTE this is only returning true once... not sure if that is correct?
     // TODO chck accuracy
 
-    // Stage 1: Compare Whole Data Arrays
+    // Stage 1: Compare Whole Data Arrays 
     if (level == 1){
-        if (memcmp(p1->data, p2->data, DATA_SIZE) == 0){
+        if (memcmp(&p1->data, &p2->data, DATA_SIZE) == 0){
             return true;
-        }
-        else{
+        } else {
             return false;
         }
     }

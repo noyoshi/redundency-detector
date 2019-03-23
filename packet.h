@@ -11,7 +11,7 @@ typedef struct _packet {
     uint32_t        size; /* Size of the packet */
 } packet;
 
-unsigned long hashData(unsigned char*); 
+unsigned long long hashData(unsigned char*); 
 bool checkContent(packet *, packet *, int); 
 float getTotalData(std::vector<packet *>);
 
