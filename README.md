@@ -23,6 +23,9 @@ Note: the buffer size should be proportional to the number of consumer threads
 we will make, as the more consumer threads means that the less packets will be
 waiting on the buffer, ie we can have a smaller buffer.  
 
+Note: Linear probing appears to be slightly faster, but less accurate. Need to
+see how much less accurate and if smarter caching could be used to improve.
+
 ### TODOs
 - [x] Detect redundancy on a whole packet payload basis using a hash function across the packet payload.
 - [ ] Detect redundancy on sub-packet windows (minimum of 64 bytes).

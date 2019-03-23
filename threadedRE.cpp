@@ -58,7 +58,7 @@ bool doneReading = false;
 
 packet * sharedBuffer[15] = { NULL };
 // TODO change this to be a linear probing hash table! it is faster...
-list<packet *> * hashTable[HASHTABLE_SIZE]  = { NULL };
+packet * hashTable[HASHTABLE_SIZE]  = { NULL };
 
 packet * get() {
     // TODO consider taking this out as it is an extra subroutine call...
@@ -88,8 +88,17 @@ void addPacketToHashTable(packet * p) {
         freePacket(p);
         return;
     }
-    hashTable[p->hash] = new list<packet *>;
-    hashTable[p->hash]->push_back(p);
+    hashTable[p->hash] = p; 
+}
+
+bool checkRedundantPacket(packet * p1, packet * p2, int level) {
+    if (checkContent(p1, p2, level)) {
+        totalRedundantBytes += p1->size;
+        ++ hits;
+        freePacket(p2);
+        return true;
+    } 
+    return false;
 }
 
 void * consumerThread(void * arg) {
@@ -111,32 +120,26 @@ void * consumerThread(void * arg) {
         if (sharedBufferIndex > 0) {
             packet * p = get();
             assert(p != NULL);
-            list<packet *> * listPtr = hashTable[p->hash];
-            if (listPtr == NULL) {
+            packet * packetPtr = hashTable[p->hash];
+            if (packetPtr == NULL) {
                 addPacketToHashTable(p);
             } else {
                 bool foundMatch = false;
-                for (list<packet *>::iterator it = listPtr->begin(); it != listPtr->end(); it ++) {
-                    if (checkContent(*it, p, 1)) {
-                        // Found redundant data
-                        totalRedundantBytes += p->size;
-                        foundMatch = true;
-                        hits ++;
-                        freePacket(p); 
+                int currentIndex = p->hash;
+                while (packetPtr->hash == p->hash && currentIndex < HASHTABLE_SIZE) {
+                    if ((foundMatch = checkRedundantPacket(packetPtr, p, 1))) 
                         break;
-                    }
+                    currentIndex ++;
+                    packetPtr = hashTable[++currentIndex];
+                    if (packetPtr == NULL) break;
                 }
                 if (!foundMatch) {
                     // If we did not find an exact match, add the packet to the
                     // bucket IF WE HAVE NOT GOTTEN TO MEMORY LIMIT
-                    if (dataInMemory <= MEMORY_LIMIT)
-                        listPtr->push_back(p);
+                    if (dataInMemory <= MEMORY_LIMIT && hashTable[currentIndex] == NULL)
+                        hashTable[currentIndex] = p;
                     else 
                         freePacket(p);
-                    // TODO remove this hwn we are done testing
-                    if (listPtr->size() > maxListSize) {
-                        maxListSize = listPtr->size();
-                    }
                 } 
                 /* totalRedundantBytes += p->size; */
                 // TODO cache eviction? idk
@@ -189,11 +192,6 @@ void help(char *progname) {
 void freeHashTable() {
     for (size_t i = 0; i < HASHTABLE_SIZE; i ++) {
         if (hashTable[i] != NULL) {
-            // Free all packets in the bucket
-            for (list<packet *>::iterator it = hashTable[i]->begin(); it != hashTable[i]->end(); it ++) {
-                free(*it);
-            }
-            // Frees the bucket
             free(hashTable[i]);
             hashTable[i] = NULL;
         }
