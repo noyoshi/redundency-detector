@@ -63,7 +63,7 @@ list<packet *> * hashTable[HASHTABLE_SIZE]  = { NULL };
 packet * get() {
     // TODO consider taking this out as it is an extra subroutine call...
     sharedBufferIndex --;
-    printf("sharedBufferIndex -> %d\n", sharedBufferIndex);
+    /* printf("sharedBufferIndex -> %d\n", sharedBufferIndex); */
     return sharedBuffer[sharedBufferIndex];
 }
 
@@ -115,7 +115,6 @@ void * consumerThread(void * arg) {
             if (listPtr == NULL) {
                 addPacketToHashTable(p);
             } else {
-                puts("collision");
                 bool foundMatch = false;
                 for (list<packet *>::iterator it = listPtr->begin(); it != listPtr->end(); it ++) {
                     if (checkContent(*it, p, 1)) {
@@ -201,7 +200,7 @@ void freeHashTable() {
     }
 }
 
-void analyzeFile(FILE * fp, int numThreads) {
+void analyzeFile(FILE * fp, int numThreads, bool output) {
     /* Producer that loops through the input file and fills a queue of packets */
     // TODO either make this into something that can be run in a thread, or call
     // a thread that reads the file
@@ -267,14 +266,15 @@ void analyzeFile(FILE * fp, int numThreads) {
     }
 
     /* Frees the argument struct */
-    REPORT;
+    if (output)
+        REPORT;
     free(threadArgs);
-    printf("%ld redundant bytes\n", totalRedundantBytes);
+    /* printf("%ld redundant bytes\n", totalRedundantBytes); */
 
     /* For development */
-    fprintf(stderr, "%.2f MB max used for storage\n", (float) maxDataInMemory / 1000000.0f); 
-    fprintf(stderr, "%ld packets processed\n", numPackets);
-    fprintf(stderr, "%d is the longest bucket\n", maxListSize);
+    /* fprintf(stderr, "%.2f MB max used for storage\n", (float) maxDataInMemory / 1000000.0f); */ 
+    /* fprintf(stderr, "%ld packets processed\n", numPackets); */
+    /* fprintf(stderr, "%d is the longest bucket\n", maxListSize); */
 }
 
 bool isNumber(char * optarg) {
@@ -327,11 +327,12 @@ int main(int argc, char * argv[]) {
     int level = 1;
     int numThreads = 2; // TODO: change to "optimal" when we know what that is
     int c;
+    bool output = false;
 
     if(argc == 1) help(argv[0]);
 
     // process command line arguments
-    while((c = getopt(argc, argv, "hl:t:")) != -1){
+    while((c = getopt(argc, argv, "hl:t:o")) != -1){
         switch(c){
             case 'h':
                 help(argv[0]);
@@ -347,6 +348,9 @@ int main(int argc, char * argv[]) {
                 if (!isNumber(optarg)) help(argv[0]);
                 numThreads = atoi(optarg);
                 break;
+            case 'o':
+                output = true;
+                break;
             default:
                 help(argv[0]);
                 break;
@@ -356,10 +360,9 @@ int main(int argc, char * argv[]) {
     // process files remaining in command line arguments
     for(size_t i = optind; i < argc; i++){
         FILE * inputFile = fopen(argv[i], "r");
-        fprintf(stderr, "Analyzing file\n");
         if (inputFile == NULL) ERROR;
         // Get the packet data from the file
-        analyzeFile(inputFile, numThreads);
+        analyzeFile(inputFile, numThreads, output);
 
         /* Cleanup */
         fclose(inputFile);

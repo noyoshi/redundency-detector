@@ -21,7 +21,7 @@ unsigned long long hashData(unsigned char *str){
         c = (str[i] == '\0') ? 0 : str[i]; 
         hash = ((hash << 5) + hash) + c;
     }
-    printf("current hash is %llu\n", hash);
+    /* printf("current hash is %llu\n", hash); */
     return hash;
 }
 
@@ -78,7 +78,7 @@ packet* parsePacket(FILE * fp) {
 
     /* Let’s do a sanity check before reading */
     if(packetLength < DATA_SIZE && packetLength > 128) {
-        printf("Packet length was %d\n", packetLength);
+        /* printf("Packet length was %d\n", packetLength); */
         /* Might not be a bad idea to pay attention to this return value */
         // We want to skip the first 52 bytes of the packer per the instructions
         check(fseek(fp, 52, SEEK_CUR));
@@ -94,7 +94,7 @@ packet* parsePacket(FILE * fp) {
         p->hash =  hashData(p->data) % HASHTABLE_SIZE;
         p->size = packetLength; // TODO is this the correct number?
     } else {
-        printf("Skipping %d bytes ahead - packet is wrong size\n", packetLength);
+        /* printf("Skipping %d bytes ahead - packet is wrong size\n", packetLength); */
 
         // If we fseek past the end of a file and never read, "eof" won't be set
         // Fix -> do a garbage fread that will set the "eof" if we are past the
