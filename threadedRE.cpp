@@ -41,7 +41,7 @@ typedef struct _thread__arg {
 
 // TODO change buffer size to be larger??? Figure out how this plays into the
 // memory constraint of the assignment...
-int BUFFER_SIZE = 15;
+int BUFFER_SIZE = 100;
 int sharedBufferIndex = 0;
 int hits = 0;
 
@@ -56,11 +56,11 @@ int maxListSize = 0;
 
 bool doneReading = false;
 
-packet * sharedBuffer[15] = { NULL };
+packet sharedBuffer[100];
 // TODO change this to be a linear probing hash table! it is faster...
-packet * hashTable[HASHTABLE_SIZE]  = { NULL };
+packet hashTable[HASHTABLE_SIZE];
 
-packet * get() {
+packet get() {
     // TODO consider taking this out as it is an extra subroutine call...
     sharedBufferIndex --;
     /* printf("sharedBufferIndex -> %d\n", sharedBufferIndex); */
@@ -69,11 +69,11 @@ packet * get() {
 
 void freePacket(packet * p) {
     dataInMemory -= sizeof(packet);
-    free(p);
+    /* free(p); */
 }
 
 void addPacketToBuffer(packet * p) {
-    sharedBuffer[sharedBufferIndex++] = p;
+    sharedBuffer[sharedBufferIndex++] = *p;
     totalBytesProcessed += p->size;
     dataInMemory += sizeof(packet);
     numPackets += 1;
@@ -81,21 +81,83 @@ void addPacketToBuffer(packet * p) {
         maxDataInMemory = dataInMemory;
 }
 
+void parsePacket(FILE * fp) {
+    /* Parses the file we are reading and creates a single packet */
+    uint32_t     packetLength;
+
+    packet p;
+
+    /* Skip the ts_sec field */
+    check(fseek(fp, 4, SEEK_CUR));
+
+    /* Skip the ts_usec field */
+    check(fseek(fp, 4, SEEK_CUR));
+
+    // Instead of the above?
+    /* check(fseek(fp, 8, SEEK_CUR)); */
+
+    /* Read in the incl_len field */
+    check(fread(&packetLength, 4, 1, fp));
+
+    /* Skip the orig_len field */
+    check(fseek(fp, 4, SEEK_CUR));
+
+    /* Let’s do a sanity check before reading */
+    if(packetLength < DATA_SIZE && packetLength > 128) {
+        /* printf("Packet length was %d\n", packetLength); */
+        /* Might not be a bad idea to pay attention to this return value */
+        // We want to skip the first 52 bytes of the packer per the instructions
+        check(fseek(fp, 52, SEEK_CUR));
+        int dataLength = packetLength - 52;
+        // packetData contains the byte data we care about
+        // TODO intialize a new packet data structure here
+        // TODO save the packet to the shared data structure here
+        // TODO set something so that the consumer can know that there is
+        // some new data to work on
+        /* p = (packet*) calloc(1, sizeof(packet)); */
+        /* if (p == NULL) ERROR; */
+        p.valid = true;
+        check(fread(p.data, 1, dataLength, fp));
+        p.hash = hashData(p.data) % HASHTABLE_SIZE;
+        p.size = packetLength; // TODO is this the correct number?
+        addPacketToBuffer(&p);
+    } else {
+        /* printf("Skipping %d bytes ahead - packet is wrong size\n", packetLength); */
+
+        // If we fseek past the end of a file and never read, "eof" won't be set
+        // Fix -> do a garbage fread that will set the "eof" if we are past the
+        // end of the file. Otherwise, if the last packet in the file is
+        // something we want to skip, then we will never read and only seek -
+        // this not setting "eof" and never ending the reading loop for the
+        // file.
+        uint32_t garbage;
+        check(fseek(fp, packetLength - 4, SEEK_CUR));
+        check(fread(&garbage, 4, 1, fp));
+    }
+
+    /* TODO this might not work because if this is ran in a thread...? Weird
+     * stuff happens? But since we are mallocing it idk maybe its ok?
+     */
+    /* return p; */
+}
+
+
+
 void addPacketToHashTable(packet * p) {
     /* BEWARE MEMORY LEAKS */
     // ALSO CHECK TO SEE IF WE ARE OVER MEMORY LIMIT
-    if (dataInMemory >= MEMORY_LIMIT) {
-        freePacket(p);
-        return;
-    }
-    hashTable[p->hash] = p; 
+    /* if (dataInMemory >= MEMORY_LIMIT) { */
+    /*     freePacket(p); */
+    /*     return; */
+    /* } */
+    hashTable[p->hash] = *p; 
 }
 
 bool checkRedundantPacket(packet * p1, packet * p2, int level) {
     if (checkContent(p1, p2, level)) {
         totalRedundantBytes += p1->size;
         ++ hits;
-        freePacket(p2);
+        /* freePacket(p2); */
         return true;
     } 
     return false;
@@ -118,28 +180,28 @@ void * consumerThread(void * arg) {
             pthread_cond_wait(args->fill, args->mutex);
         }
         if (sharedBufferIndex > 0) {
-            packet * p = get();
-            assert(p != NULL);
-            packet * packetPtr = hashTable[p->hash];
-            if (packetPtr == NULL) {
-                addPacketToHashTable(p);
+            packet p = get();
+            assert(p.valid == true);
+            packet packet = hashTable[p.hash];
+            if (!packet.valid) {
+                addPacketToHashTable(&p);
             } else {
                 bool foundMatch = false;
-                int currentIndex = p->hash;
-                while (packetPtr->hash == p->hash && currentIndex < HASHTABLE_SIZE) {
-                    if ((foundMatch = checkRedundantPacket(packetPtr, p, 1))) 
+                int currentIndex = p.hash;
+                while (packet.hash == p.hash && currentIndex < HASHTABLE_SIZE) {
+                    if ((foundMatch = checkRedundantPacket(&packet, &p, 1))) 
                         break;
                     currentIndex ++;
-                    packetPtr = hashTable[++currentIndex];
-                    if (packetPtr == NULL) break;
+                    packet = hashTable[++currentIndex];
+                    if (!packet.valid) break;
                 }
                 if (!foundMatch) {
                     // If we did not find an exact match, add the packet to the
                     // bucket IF WE HAVE NOT GOTTEN TO MEMORY LIMIT
-                    if (dataInMemory <= MEMORY_LIMIT && hashTable[currentIndex] == NULL)
+                    if (dataInMemory <= MEMORY_LIMIT && !hashTable[currentIndex].valid)
                         hashTable[currentIndex] = p;
                     else 
-                        freePacket(p);
+                        freePacket(&p);
                 } 
                 /* totalRedundantBytes += p->size; */
                 // TODO cache eviction? idk
@@ -160,15 +222,15 @@ void * producerThread(void * arg) {
     // Loop through the file and parse the packets
     while(feof(args->fp) == 0) {
         // Parses out the packets from the file pointer
-        packet * p = parsePacket(args->fp);
         pthread_mutex_lock(args->mutex);
         // Wait while the buffer is full...
         while (sharedBufferIndex == BUFFER_SIZE)
             pthread_cond_wait(args->empty, args->mutex);
 
         // Pushes to the buffer
-        if (p != NULL) 
-            addPacketToBuffer(p);
+        /* if (p != NULL) */ 
+        parsePacket(args->fp);
+        /* addPacketToBuffer(p); */
 
         pthread_cond_signal(args->fill);
         pthread_mutex_unlock(args->mutex);
@@ -189,14 +251,14 @@ void help(char *progname) {
     exit(0);
 }
 
-void freeHashTable() {
-    for (size_t i = 0; i < HASHTABLE_SIZE; i ++) {
-        if (hashTable[i] != NULL) {
-            free(hashTable[i]);
-            hashTable[i] = NULL;
-        }
-    }
-}
+/* void freeHashTable() { */
+/*     for (size_t i = 0; i < HASHTABLE_SIZE; i ++) { */
+/*         if (hashTable[i] != NULL) { */
+/*             free(hashTable[i]); */
+/*             hashTable[i] = NULL; */
+/*         } */
+/*     } */
+/* } */
 
 void analyzeFile(FILE * fp, int numThreads, bool output) {
     /* Producer that loops through the input file and fills a queue of packets */
@@ -326,6 +388,9 @@ int main(int argc, char * argv[]) {
     int numThreads = 2; // TODO: change to "optimal" when we know what that is
     int c;
     bool output = false;
+    // 0 Initializes the hash table
+    memset(hashTable, 0, sizeof(hashTable));
+    memset(sharedBuffer, 0, sizeof(sharedBuffer));
 
     if(argc == 1) help(argv[0]);
 
@@ -365,7 +430,7 @@ int main(int argc, char * argv[]) {
         /* Cleanup */
         fclose(inputFile);
     }
-    freeHashTable();
+    /* freeHashTable(); */
 
     return EXIT_SUCCESS;
 }

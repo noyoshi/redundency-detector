@@ -9,6 +9,7 @@ typedef struct _packet {
     unsigned char   data[DATA_SIZE]; /* 2400 bytes is max packet size */
     int             hash; /* Hash of the packet */
     uint32_t        size; /* Size of the packet */
+    bool            valid; /* Valid or not */
 } packet;
 
 unsigned long long hashData(unsigned char*); 
@@ -16,4 +17,4 @@ bool checkContent(packet *, packet *, int);
 float getTotalData(std::vector<packet *>);
 
 void freePackets(); 
-packet* parsePacket(FILE *);
+/* packet* parsePacket(FILE *); */

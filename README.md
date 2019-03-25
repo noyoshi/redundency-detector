@@ -26,6 +26,8 @@ waiting on the buffer, ie we can have a smaller buffer.
 Note: Linear probing appears to be slightly faster, but less accurate. Need to
 see how much less accurate and if smarter caching could be used to improve.
 
+https://people.cs.clemson.edu/~dhouse/courses/405/papers/optimize.pdf
+
 ### TODOs
 - [x] Detect redundancy on a whole packet payload basis using a hash function across the packet payload.
 - [ ] Detect redundancy on sub-packet windows (minimum of 64 bytes).
