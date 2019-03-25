@@ -248,7 +248,7 @@ void analyzeFile(FILE * fp, int numThreads, bool output) {
     pthread_t consumers[numThreads];
 
     // Make all the consumers
-    for (size_t i = 0; i < numThreads; i ++) {
+    for (size_t i = 0; i < (size_t) numThreads; i ++) {
         if (pthread_create(&consumers[i], NULL, consumerThread, threadArgs) < 0) {
             free(threadArgs);
             ERROR;
@@ -259,7 +259,7 @@ void analyzeFile(FILE * fp, int numThreads, bool output) {
     if (pthread_join(producer, NULL) < 0)
         ERROR;
 
-    for (size_t i = 0; i < numThreads; i ++) {
+    for (size_t i = 0; i < (size_t) numThreads; i ++) {
         if (pthread_join(consumers[i], NULL) < 0) ERROR;
     }
 
@@ -356,7 +356,7 @@ int main(int argc, char * argv[]) {
     }
 
     // process files remaining in command line arguments
-    for(size_t i = optind; i < argc; i++){
+    for(size_t i = optind; i < (size_t) argc; i++){
         FILE * inputFile = fopen(argv[i], "r");
         if (inputFile == NULL) ERROR;
         // Get the packet data from the file
