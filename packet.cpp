@@ -62,26 +62,27 @@ packet* parsePacket(FILE * fp) {
     packet *p = NULL;
 
     /* Skip the ts_sec field */
-    check(fseek(fp, 4, SEEK_CUR));
+    /* check(fseek(fp, 4, SEEK_CUR)); */
 
     /* Skip the ts_usec field */
-    check(fseek(fp, 4, SEEK_CUR));
+    /* check(fseek(fp, 4, SEEK_CUR)); */
 
     // Instead of the above?
-    /* check(fseek(fp, 8, SEEK_CUR)); */
+    check(fseek(fp, 8, SEEK_CUR));
 
     /* Read in the incl_len field */
     check(fread(&packetLength, 4, 1, fp));
 
     /* Skip the orig_len field */
-    check(fseek(fp, 4, SEEK_CUR));
+    // If you add this back, make sure to subtract 4 from bottom fseeks
+    /* check(fseek(fp, 4, SEEK_CUR)); */
 
     /* Let’s do a sanity check before reading */
     if(packetLength < DATA_SIZE && packetLength > 128) {
         /* printf("Packet length was %d\n", packetLength); */
         /* Might not be a bad idea to pay attention to this return value */
         // We want to skip the first 52 bytes of the packer per the instructions
-        check(fseek(fp, 52, SEEK_CUR));
+        check(fseek(fp, 56, SEEK_CUR));
         int dataLength = packetLength - 52;
         // packetData contains the byte data we care about
         // TODO intialize a new packet data structure here
@@ -103,7 +104,7 @@ packet* parsePacket(FILE * fp) {
         // this not setting "eof" and never ending the reading loop for the
         // file.
         uint32_t garbage;
-        check(fseek(fp, packetLength - 4, SEEK_CUR));
+        check(fseek(fp, packetLength, SEEK_CUR));
         check(fread(&garbage, 4, 1, fp));
     }
 

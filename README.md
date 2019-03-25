@@ -18,6 +18,7 @@ memory limits), you may elect to use whatever data structures and strategy you d
 - [ ] Evaluate linear probing as a possible hash table implementation
 - [ ] Benchmark each build
 - [ ] Make sure that as few things as possible are being passed by value
+- [ ] Fix single valgrind error
 
 Note: the buffer size should be proportional to the number of consumer threads
 we will make, as the more consumer threads means that the less packets will be
