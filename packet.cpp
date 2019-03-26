@@ -13,7 +13,7 @@ using namespace std;
 
 /* Hashes the given data and returns the hashed data */
 /* djb2 hash */
-unsigned long long hashData(unsigned char *str){
+unsigned long long djb2Hash(unsigned char *str){
     unsigned long long hash = 5381;
     int c; 
 
@@ -21,7 +21,6 @@ unsigned long long hashData(unsigned char *str){
         c = (str[i] == '\0') ? 0 : str[i]; 
         hash = ((hash << 5) + hash) + c;
     }
-    /* printf("current hash is %llu\n", hash); */
     return hash;
 }
 
@@ -92,7 +91,7 @@ packet* parsePacket(FILE * fp) {
         p = (packet*) calloc(1, sizeof(packet));
         if (p == NULL) ERROR;
         check(fread(p->data, 1, dataLength, fp));
-        p->hash =  hashData(p->data) % HASHTABLE_SIZE;
+        /* p->hash =  hashData(p->data) % HASHTABLE_SIZE; */
         p->size = packetLength; // TODO is this the correct number?
     } else {
         /* printf("Skipping %d bytes ahead - packet is wrong size\n", packetLength); */

@@ -13,6 +13,7 @@
 #include "packet.h"
 #include "config.h"
 #include "unistd.h"
+#include "murmur3/murmur3.h"
 
 
 using namespace std;
@@ -30,6 +31,7 @@ using namespace std;
 // 62 MB TODO see how close to 64 MB we can get
 // Should also assume we have a buffer that is max full...
 #define MEMORY_LIMIT 63900000
+#define BLOOM_FILTER_SIZE 60000000
 
 // Global mutex / condition variables and file pointer
 typedef struct _thread__arg {
@@ -57,13 +59,11 @@ int maxListSize = 0;
 bool doneReading = false;
 
 packet * sharedBuffer[15] = { NULL };
-// TODO change this to be a linear probing hash table! it is faster...
-packet * hashTable[HASHTABLE_SIZE]  = { NULL };
+char bloomFilter[BLOOM_FILTER_SIZE] = { 0 };
 
 packet * get() {
     // TODO consider taking this out as it is an extra subroutine call...
     sharedBufferIndex --;
-    /* printf("sharedBufferIndex -> %d\n", sharedBufferIndex); */
     return sharedBuffer[sharedBufferIndex];
 }
 
@@ -82,23 +82,22 @@ void addPacketToBuffer(packet * p) {
 }
 
 void addPacketToHashTable(packet * p) {
-    /* BEWARE MEMORY LEAKS */
-    // ALSO CHECK TO SEE IF WE ARE OVER MEMORY LIMIT
-    if (dataInMemory >= MEMORY_LIMIT) {
-        freePacket(p);
-        return;
+    // TODO add the packet INFO to the bloom filter
+    long djb2 = djb2Hash(p->data) % BLOOM_FILTER_SIZE;
+    unsigned char murmur[128];
+    MurmurHash3_x64_128(p->data, 2400, 1230, murmur);
+    long hash = 0; 
+    for (int i = 0; i < 20; i ++) {
+        hash = (int) murmur[0] + djb2 * i;
+        hash = hash % BLOOM_FILTER_SIZE;
+        bloomFilter[hash] = 1;
+        printf("%d\n", hash);
     }
-    hashTable[p->hash] = p; 
 }
 
-bool checkRedundantPacket(packet * p1, packet * p2, int level) {
-    if (checkContent(p1, p2, level)) {
-        totalRedundantBytes += p1->size;
-        ++ hits;
-        freePacket(p2);
-        return true;
-    } 
-    return false;
+int checkBloomFilter(packet * p) {
+    // TODO check to see if the packet is in the bloom filter
+    return 0;
 }
 
 void * consumerThread(void * arg) {
@@ -120,32 +119,13 @@ void * consumerThread(void * arg) {
         if (sharedBufferIndex > 0) {
             packet * p = get();
             assert(p != NULL);
-            packet * packetPtr = hashTable[p->hash];
-            if (packetPtr == NULL) {
+            if (checkBloomFilter(p) == 0) {
                 addPacketToHashTable(p);
             } else {
-                bool foundMatch = false;
-                int currentIndex = p->hash;
-                while (packetPtr->hash == p->hash && currentIndex < HASHTABLE_SIZE) {
-                    if ((foundMatch = checkRedundantPacket(packetPtr, p, 1))) 
-                        break;
-                    currentIndex ++;
-                    packetPtr = hashTable[++currentIndex];
-                    if (packetPtr == NULL) break;
-                }
-                if (!foundMatch) {
-                    // If we did not find an exact match, add the packet to the
-                    // bucket IF WE HAVE NOT GOTTEN TO MEMORY LIMIT
-                    if (dataInMemory <= MEMORY_LIMIT && hashTable[currentIndex] == NULL)
-                        hashTable[currentIndex] = p;
-                    else 
-                        freePacket(p);
-                } 
-                /* totalRedundantBytes += p->size; */
-                // TODO cache eviction? idk
-                /* freePacket(p); */
-                // TODO full match?
+                hits ++;
+                totalRedundantBytes += p->size;
             }
+            freePacket(p);
         }
         pthread_cond_signal(args->empty);
         pthread_mutex_unlock(args->mutex);
@@ -189,14 +169,6 @@ void help(char *progname) {
     exit(0);
 }
 
-void freeHashTable() {
-    for (size_t i = 0; i < HASHTABLE_SIZE; i ++) {
-        if (hashTable[i] != NULL) {
-            free(hashTable[i]);
-            hashTable[i] = NULL;
-        }
-    }
-}
 
 void analyzeFile(FILE * fp, int numThreads, bool output) {
     /* Producer that loops through the input file and fills a queue of packets */
@@ -211,7 +183,6 @@ void analyzeFile(FILE * fp, int numThreads, bool output) {
     totalBytesProcessed = 0;
     sharedBufferIndex = 0;
     doneReading = false;
-    sharedBufferIndex = 0;
     numPackets = 0;
 
     /* Condition variables and lock */
@@ -365,7 +336,6 @@ int main(int argc, char * argv[]) {
         /* Cleanup */
         fclose(inputFile);
     }
-    freeHashTable();
 
     return EXIT_SUCCESS;
 }
