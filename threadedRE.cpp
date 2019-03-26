@@ -25,13 +25,14 @@ using namespace std;
 
 /* Generates a report */
 #define REPORT \
-    { printf("%ld bytes processed\n%d hits\n%ld redundency detected\n", \
+    { printf("%ld bytes processed\n%d hits\n%ld %% redundency detected\n", \
         totalBytesProcessed, hits, (totalRedundantBytes * 100) / totalBytesProcessed);} \
 
 // 62 MB TODO see how close to 64 MB we can get
 // Should also assume we have a buffer that is max full...
 #define MEMORY_LIMIT 63900000
-#define BLOOM_FILTER_SIZE 60000000
+#define BLOOM_FILTER_SIZE 61000000
+#define N_HASHES 5
 
 // Global mutex / condition variables and file pointer
 typedef struct _thread__arg {
@@ -87,17 +88,27 @@ void addPacketToHashTable(packet * p) {
     unsigned char murmur[128];
     MurmurHash3_x64_128(p->data, 2400, 1230, murmur);
     long hash = 0; 
-    for (int i = 0; i < 20; i ++) {
+    for (int i = 0; i < N_HASHES; i ++) {
         hash = (int) murmur[0] + djb2 * i;
         hash = hash % BLOOM_FILTER_SIZE;
         bloomFilter[hash] = 1;
-        printf("%d\n", hash);
+        /* printf("%ld\n", hash); */
     }
 }
 
 int checkBloomFilter(packet * p) {
     // TODO check to see if the packet is in the bloom filter
-    return 0;
+    long djb2 = djb2Hash(p->data) % BLOOM_FILTER_SIZE;
+    unsigned char murmur[128];
+    MurmurHash3_x64_128(p->data, 2400, 1230, murmur);
+    long hash = 0; 
+    for (int i = 0; i < N_HASHES; i ++) {
+        hash = (int) murmur[0] + djb2 * i;
+        hash = hash % BLOOM_FILTER_SIZE;
+        if (bloomFilter[hash] == 0) return 0; 
+        /* printf("%ld\n", hash); */
+    }
+    return 1;
 }
 
 void * consumerThread(void * arg) {
@@ -179,8 +190,6 @@ void analyzeFile(FILE * fp, int numThreads, bool output) {
      * global variables to zero
      */
     hits = 0;
-    totalRedundantBytes = 0;
-    totalBytesProcessed = 0;
     sharedBufferIndex = 0;
     doneReading = false;
     numPackets = 0;
@@ -241,9 +250,11 @@ void analyzeFile(FILE * fp, int numThreads, bool output) {
     /* printf("%ld redundant bytes\n", totalRedundantBytes); */
 
     /* For development */
-    /* fprintf(stderr, "%.2f MB max used for storage\n", (float) maxDataInMemory / 1000000.0f); */ 
-    /* fprintf(stderr, "%ld packets processed\n", numPackets); */
-    /* fprintf(stderr, "%d is the longest bucket\n", maxListSize); */
+#ifdef DEBUG_ALL
+    float dataInMemory = (float) maxDataInMemory + sizeof(char) * BLOOM_FILTER_SIZE;
+    fprintf(stderr, "%ld packets processed\n", numPackets);
+    fprintf(stderr, "%.2f MB max used for storage\n", dataInMemory / 1000000.0f); 
+#endif
 }
 
 bool isNumber(char * optarg) {
