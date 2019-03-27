@@ -82,33 +82,29 @@ void addPacketToBuffer(packet * p) {
         maxDataInMemory = dataInMemory;
 }
 
-void addPacketToHashTable(packet * p) {
-    // TODO add the packet INFO to the bloom filter
+int checkAndAddToBloomFilter(packet * p) {
+    // Checks and adds the packet to the bloom filter
     long djb2 = djb2Hash(p->data) % BLOOM_FILTER_SIZE;
     unsigned char murmur[128];
     MurmurHash3_x64_128(p->data, 2400, 1230, murmur);
     long hash = 0; 
+    // By default assume that it is redundant
+    int redundant = 1;
     for (int i = 0; i < N_HASHES; i ++) {
         hash = (int) murmur[0] + djb2 * i;
         hash = hash % BLOOM_FILTER_SIZE;
-        bloomFilter[hash] = 1;
-        /* printf("%ld\n", hash); */
-    }
-}
+        // If the bloom filter comes up with ANY 0s, then we KNOW that this is 
+        // NOT redundant
+        if (bloomFilter[hash] == 0) redundant = 0; 
 
-int checkBloomFilter(packet * p) {
-    // TODO check to see if the packet is in the bloom filter
-    long djb2 = djb2Hash(p->data) % BLOOM_FILTER_SIZE;
-    unsigned char murmur[128];
-    MurmurHash3_x64_128(p->data, 2400, 1230, murmur);
-    long hash = 0; 
-    for (int i = 0; i < N_HASHES; i ++) {
-        hash = (int) murmur[0] + djb2 * i;
-        hash = hash % BLOOM_FILTER_SIZE;
-        if (bloomFilter[hash] == 0) return 0; 
-        /* printf("%ld\n", hash); */
+        // After the above check, we set it to 1, thereby "adding" it to the
+        // bloom filter
+        bloomFilter[hash] = 1;
+#ifdef DEBUG_ALL
+        printf("[HASH] %ld\n", hash);
+#endif
     }
-    return 1;
+    return redundant;
 }
 
 void * consumerThread(void * arg) {
@@ -130,9 +126,7 @@ void * consumerThread(void * arg) {
         if (sharedBufferIndex > 0) {
             packet * p = get();
             assert(p != NULL);
-            if (checkBloomFilter(p) == 0) {
-                addPacketToHashTable(p);
-            } else {
+            if (checkAndAddToBloomFilter(p) == 1) {
                 hits ++;
                 totalRedundantBytes += p->size;
             }
