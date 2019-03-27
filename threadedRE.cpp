@@ -55,6 +55,8 @@ bool doneReading = false;
 packet * sharedBuffer[BUFFER_SIZE] = { NULL };
 char bloomFilter[BLOOM_FILTER_SIZE] = { 0 };
 
+int LEVEL = 1;
+
 /* Debug stuff */
 #ifdef DEBUG_ALL
 long int maxDataInMemory = 0;
@@ -162,14 +164,14 @@ void * producerThread(void * arg) {
 }
 
 /* Prints out a help message if the -h flag, or incorrect flags are given */
-void help(char *progname) {
+void help(char *progname, int status) {
     printf("usage: %s [-l LEVEL] [-t THREADS] file ...\n", progname);
     printf("\t -l LEVEL: set level of redundancy detection (default = 1)\n");
     printf("\t -t THREADS: # of threads to run (default = 2)\n");
     printf("\tMax threads: 10\n");
     printf("\tLevel 1: Detect redundancy on a whole packet payload basis using a hash function across the packet payload.\n");
     printf("\tLevel 2: Detect redundancy on sub-packet windows (minimum of 64 bytes).\n");
-    exit(0);
+    exit(status);
 }
 
 
@@ -252,35 +254,38 @@ bool isNumber(char * optarg) {
 }
 
 int main(int argc, char * argv[]) {
-    int level = 1;
     int numThreads = 2;
     int c;
     bool output = false;
 
-    if(argc == 1) help(argv[0]);
+    if(argc == 1) help(argv[0], 1);
 
     // process command line arguments
     while((c = getopt(argc, argv, "hl:t:o")) != -1){
         switch(c){
             case 'h':
-                help(argv[0]);
+                help(argv[0], 0);
             case 'l':
-                if (!isNumber(optarg)) help(argv[0]);
-                level = atoi(optarg);
-                if(level != 1 && level != 2){
-                    fprintf(stderr, "Error: invalid level specified");
-                    exit(1);
+                if (!isNumber(optarg)) help(argv[0], 1);
+                LEVEL = atoi(optarg);
+                if(LEVEL != 1 && LEVEL != 2){
+                    fprintf(stderr, "[ERROR] Invalid level specified\n");
+                    help(argv[0], 1);
                 }
                 break;
             case 't':
-                if (!isNumber(optarg)) help(argv[0]);
+                if (!isNumber(optarg)) help(argv[0], 1);
                 numThreads = atoi(optarg);
+                if (numThreads < 0 || numThreads > 9) {
+                    fprintf(stderr, "[ERROR] Invalid number of threads\n");
+                    help(argv[0], 1);
+                }
                 break;
             case 'o':
                 output = true;
                 break;
             default:
-                help(argv[0]);
+                help(argv[0], 1);
                 break;
         }
     }
