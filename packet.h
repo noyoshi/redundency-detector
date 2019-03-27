@@ -10,5 +10,5 @@ typedef struct _packet {
     uint32_t        size; /* Size of the packet */
 } packet;
 
-unsigned long long djb2Hash(unsigned char*); 
+unsigned long long djb2Hash(unsigned char*, int); 
 packet * parsePacket(FILE *);
