@@ -24,7 +24,7 @@
 // Figure out how close we can get to 64 MB 
 #define BLOOM_FILTER_SIZE 62500000
 #define BUFFER_SIZE 15
-#define N_HASHES 20
+#define N_HASHES 5
 #define STRIDE 64
 
 // Global mutex / condition variables and file pointer
@@ -42,6 +42,8 @@ int hits = 0;
 
 long int totalBytesProcessed = 0;
 long int totalRedundantBytes = 0;
+bool combo = false;
+int comboBytes = 0;
 
 int maxListSize = 0;
 
@@ -79,16 +81,14 @@ void addPacketToBuffer(packet * p) {
 #endif
 }
 
-void checkAndAddToBloomFilter(packet * p) {
-    // Checks and adds the packet to the bloom filter
-    // TODO make this a loop that checks on windows of a certain size
-    // If it is level 1, then the window size is the entire packet
-    unsigned long djb2 = djb2Hash(p->data) % BLOOM_FILTER_SIZE;
+bool hashAndAdd(unsigned char * data, int size) {
+    /* Hashes data and adds it to the bloom filter? */
+    unsigned long djb2 = djb2Hash(data, size) % BLOOM_FILTER_SIZE;
     unsigned char murmur[128];
-    MurmurHash3_x64_128(p->data, 2400, 1230, murmur);
+    MurmurHash3_x64_128(data, size, 1230, murmur);
     long hash = 0; 
     // By default assume that it is redundant
-    int redundant = 1;
+    bool redundant = true;
     for (int i = 1; i < N_HASHES + 1; i ++) {
         // The more dank this is, the better this is gonna be!
         hash = (int) murmur[0] + ((int) murmur[1] * 33) + djb2 * i;
@@ -96,7 +96,7 @@ void checkAndAddToBloomFilter(packet * p) {
         // If the bloom filter comes up with ANY 0s, then we KNOW that this is 
         // NOT redundant
         if (bloomFilter[hash] == 0) {
-            redundant = 0; 
+            redundant = false; 
         }
 
         // After the above check, we set it to 1, thereby "adding" it to the
@@ -110,11 +110,52 @@ void checkAndAddToBloomFilter(packet * p) {
     printf("[MURMUR] %d\n", (int) murmur[0]);
 #endif
 
-    // Do redundancy handling here
-    if (redundant == 1) {
-        hits ++;
-        totalRedundantBytes += p->size;
+    if (redundant) {
+        if (!combo){
+            comboBytes = size;
+            combo = true;
+        }else 
+            comboBytes += 1;
     }
+
+    return redundant;
+    // return redundant;
+}
+
+void checkAndAddToBloomFilter(packet * p) {
+    // Checks and adds the packet to the bloom filter
+    // TODO make this a loop that checks on windows of a certain size
+    // If it is level 1, then the window size is the entire packet
+    // This is making the assumption that the data size we are hashing 
+    // is always going to be of the window size?
+    unsigned char data[STRIDE];
+    int dataOffset = 0; // Where in the data array we are
+    if (level == 2) {
+        while ((dataOffset + STRIDE) < p->size) {
+            memcpy(data, p->data + dataOffset, STRIDE);
+            // If there wasn't a match, but we are currently processing a previous match,
+            // flush the data out and reset it
+            if(!hashAndAdd(data, STRIDE)) {
+                if (combo) {
+                    combo = false;
+                    totalRedundantBytes += comboBytes;
+                    comboBytes = 0;
+                    hits ++;
+                }
+            }
+            dataOffset ++;
+        }
+    } else if (level == 1) {
+        hashAndAdd(p->data, p->size);
+    }
+
+    if (combo) {
+        combo = false;
+        totalRedundantBytes += comboBytes;
+        comboBytes = 0;
+        hits ++;
+    } 
+    // TODO update hits and totalRedundantData
 }
 
 void * consumerThread(void * arg) {
@@ -185,6 +226,8 @@ void analyzeFile(FILE * fp, int numThreads) {
     hits = 0;
     sharedBufferIndex = 0;
     doneReading = false;
+    comboBytes = 0;
+    combo = false;
 #ifdef DEBUG_ALL
     numPackets = 0;
 #endif

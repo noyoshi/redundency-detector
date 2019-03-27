@@ -11,11 +11,11 @@ using namespace std;
 
 /* Hashes the given data and returns the hashed data */
 /* djb2 hash */
-unsigned long long djb2Hash(unsigned char *str){
+unsigned long long djb2Hash(unsigned char *str, int size){
     unsigned long long hash = 5381;
     int c; 
 
-    for (int i = 0; i < DATA_SIZE; i++){
+    for (int i = 0; i < size; i++){
         c = (str[i] == '\0') ? 0 : str[i]; 
         hash = ((hash << 5) + hash) + (unsigned long long) c;
     }
