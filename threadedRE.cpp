@@ -1,20 +1,20 @@
-#include <iostream>
-#include <pthread.h>
-#include <stdio.h>
-#include <errno.h>
-#include <string.h>
-#include <pthread.h>
-#include <unistd.h>
-#include <stdlib.h>
 #include <assert.h>
 #include <ctype.h>
+#include <errno.h>
+#include <iostream>
 #include <list>
+#include <pthread.h>
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include "unistd.h"
 
 #include "packet.h"
 #include "config.h"
-#include "unistd.h"
-#include "murmur3/murmur3.h"
 
+#include "murmur3/murmur3.h"
 
 using namespace std;
 
@@ -25,13 +25,14 @@ using namespace std;
 
 /* Generates a report */
 #define REPORT \
-    { printf("%ld bytes processed\n%d hits\n%ld %% redundency detected\n", \
+    { printf("%ld bytes processed\n%d hits\n%ld%% redundency detected\n", \
         totalBytesProcessed, hits, (totalRedundantBytes * 100) / totalBytesProcessed);} \
 
 // 62 MB TODO see how close to 64 MB we can get
 // Should also assume we have a buffer that is max full...
 #define MEMORY_LIMIT 63900000
 #define BLOOM_FILTER_SIZE 61000000
+#define BUFFER_SIZE 15
 #define N_HASHES 20
 
 // Global mutex / condition variables and file pointer
@@ -42,44 +43,46 @@ typedef struct _thread__arg {
     pthread_cond_t  * fill;
 } thread_args;
 
-// TODO change buffer size to be larger??? Figure out how this plays into the
-// memory constraint of the assignment...
-
 /* =================== Globals ===================== */
 
-int BUFFER_SIZE = 15;
 int sharedBufferIndex = 0;
 int hits = 0;
 
 long int totalBytesProcessed = 0;
 long int totalRedundantBytes = 0;
-long int packetsProcessed    = 0;
-long int maxDataInMemory = 0;
-long int dataInMemory = 0;
-long int numPackets = 0;
 
 int maxListSize = 0;
 
 bool doneReading = false;
 
-packet * sharedBuffer[15] = { NULL };
+packet * sharedBuffer[BUFFER_SIZE] = { NULL };
 char bloomFilter[BLOOM_FILTER_SIZE] = { 0 };
+
+/* Debug stuff */
+#ifdef DEBUG_ALL
+long int maxDataInMemory = 0;
+long int dataInMemory = 0;
+long int numPackets = 0;
+#endif
 
 /* ================================================== */
 
-
 void freePacket(packet * p) {
+#ifdef DEBUG_ALL
     dataInMemory -= sizeof(packet);
+#endif
     free(p);
 }
 
 void addPacketToBuffer(packet * p) {
     sharedBuffer[sharedBufferIndex++] = p;
     totalBytesProcessed += p->size;
+#ifdef DEBUG_ALL
     dataInMemory += sizeof(packet);
     numPackets += 1;
     if (dataInMemory > maxDataInMemory) 
         maxDataInMemory = dataInMemory;
+#endif
 }
 
 int checkAndAddToBloomFilter(packet * p) {
@@ -180,10 +183,11 @@ void analyzeFile(FILE * fp, int numThreads, bool output) {
     hits = 0;
     sharedBufferIndex = 0;
     doneReading = false;
+#ifdef DEBUG_ALL
     numPackets = 0;
+#endif
 
     /* Condition variables and lock */
-    // TODO idk if this breaks for multiple files...
     pthread_cond_t empty  = PTHREAD_COND_INITIALIZER;
     pthread_cond_t fill   = PTHREAD_COND_INITIALIZER;
     pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -250,7 +254,7 @@ bool isNumber(char * optarg) {
 
 int main(int argc, char * argv[]) {
     int level = 1;
-    int numThreads = 2; // TODO: change to "optimal" when we know what that is
+    int numThreads = 2;
     int c;
     bool output = false;
 

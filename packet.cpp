@@ -21,7 +21,9 @@ unsigned long long djb2Hash(unsigned char *str){
         c = (str[i] == '\0') ? 0 : str[i]; 
         hash = ((hash << 5) + hash) + (unsigned long long) c;
     }
-    /* fprintf(stderr, "[DJ] %llu\n", hash); */
+#ifdef DEBUG_ALL
+    fprintf(stderr, "[DJ] %llu\n", hash);
+#endif
     return hash;
 }
 
@@ -30,23 +32,14 @@ packet * parsePacket(FILE * fp) {
     uint32_t     packetLength;
     packet * p = NULL;
 
-    /* Skip the ts_sec field */
-    /* check(fseek(fp, 4, SEEK_CUR)); */
-
-    /* Skip the ts_usec field */
-    /* check(fseek(fp, 4, SEEK_CUR)); */
-
-    // Instead of the above?
+    /* Skips the ts_sec and ts_usec fields */
     check(fseek(fp, 8, SEEK_CUR));
 
     /* Read in the incl_len field */
     check(fread(&packetLength, 4, 1, fp));
 
-    /* Skip the orig_len field */
-    // If you add this back, make sure to subtract 4 from bottom fseeks
-    /* check(fseek(fp, 4, SEEK_CUR)); */
+    /* Skips the orig_len field down below*/
 
-    /* Let’s do a sanity check before reading */
     if(packetLength < DATA_SIZE && packetLength > 128) {
         /* Might not be a bad idea to pay attention to this return value */
         // We want to skip the first 52 bytes of the packer per the instructions
@@ -56,7 +49,7 @@ packet * parsePacket(FILE * fp) {
         p = (packet *) calloc(1, sizeof(packet));
         if (p == NULL) ERROR;
         check(fread(p->data, 1, dataLength, fp));
-        p->size = packetLength; // TODO is this the correct number?
+        p->size = packetLength;
     } else {
         // If we fseek past the end of a file and never read, "eof" won't be set
         // Fix -> do a garbage fread that will set the "eof" if we are past the
