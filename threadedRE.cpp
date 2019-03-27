@@ -44,6 +44,9 @@ typedef struct _thread__arg {
 
 // TODO change buffer size to be larger??? Figure out how this plays into the
 // memory constraint of the assignment...
+
+/* =================== Globals ===================== */
+
 int BUFFER_SIZE = 15;
 int sharedBufferIndex = 0;
 int hits = 0;
@@ -62,11 +65,8 @@ bool doneReading = false;
 packet * sharedBuffer[15] = { NULL };
 char bloomFilter[BLOOM_FILTER_SIZE] = { 0 };
 
-packet * get() {
-    // TODO consider taking this out as it is an extra subroutine call...
-    sharedBufferIndex --;
-    return sharedBuffer[sharedBufferIndex];
-}
+/* ================================================== */
+
 
 void freePacket(packet * p) {
     dataInMemory -= sizeof(packet);
@@ -102,8 +102,8 @@ int checkAndAddToBloomFilter(packet * p) {
         // bloom filter
         bloomFilter[hash] = 1;
 #ifdef DEBUG_ALL
-        /* printf("[HASH] %ld\n", hash); */
-        /* printf("[MURMUR] %d\n", (int) murmur[0]); */
+        printf("[HASH] %ld\n", hash);
+        printf("[MURMUR] %d\n", (int) murmur[0]);
 #endif
     }
     return redundant;
@@ -111,12 +111,6 @@ int checkAndAddToBloomFilter(packet * p) {
 
 void * consumerThread(void * arg) {
     /* Consumer thread */
-    // TODO implement the checking in here...
-    // MAKE SURE TO FREE THE PACKET STRUCT!!
-    /* Consumer that gets packets from the queue and analyzes them */
-    // TODO check to see if the hash of the packet is in the hash data structure
-    // TODO if the hash is there, check to see if the data is identical
-    // TODO handle the match / no match
 
     thread_args * args = (thread_args *) arg;
     while (!doneReading || sharedBufferIndex > 0) {
@@ -126,7 +120,7 @@ void * consumerThread(void * arg) {
             pthread_cond_wait(args->fill, args->mutex);
         }
         if (sharedBufferIndex > 0) {
-            packet * p = get();
+            packet * p = sharedBuffer[--sharedBufferIndex];
             assert(p != NULL);
             if (checkAndAddToBloomFilter(p) == 1) {
                 hits ++;
@@ -179,8 +173,6 @@ void help(char *progname) {
 
 void analyzeFile(FILE * fp, int numThreads, bool output) {
     /* Producer that loops through the input file and fills a queue of packets */
-    // TODO either make this into something that can be run in a thread, or call
-    // a thread that reads the file
 
     /* Since we might be analyzing multiple files, we want to re-initialize the
      * global variables to zero
@@ -216,11 +208,6 @@ void analyzeFile(FILE * fp, int numThreads, bool output) {
         free(threadArgs);
         ERROR;
     }
-    /* Reads the input file */
-    /* We should stream stuff into the buffer and ONLY read in new packets when
-     * we can - we should not make the buffer too big due to the memory
-     * constraint...
-     */
     pthread_t consumers[numThreads];
 
     // Make all the consumers
@@ -243,7 +230,6 @@ void analyzeFile(FILE * fp, int numThreads, bool output) {
     if (output)
         REPORT;
     free(threadArgs);
-    /* printf("%ld redundant bytes\n", totalRedundantBytes); */
 
     /* For development */
 #ifdef DEBUG_ALL
@@ -263,43 +249,6 @@ bool isNumber(char * optarg) {
 }
 
 int main(int argc, char * argv[]) {
-    /* Logic should be:
-     * - Is the packet big enough? (>= 128 bytes)
-     *  - If not, ignore
-     * - Compute the hash for byte 52 -> end of the packet
-     * - Does this hash exist in our data structure?
-     * - If yes, then is it an exact match?
-     */
-
-    /* For level 2, we want to compute the match over a small window of the data
-     * in the packet. If there is a match, then we keep going into the data to
-     * see how far of a match we have?
-     */
-
-    /* Constraints:
-     * - Memory limit at 64 MB
-     * - Needs to be multithreaded (use pthreads, condition variables)
-     * - Needs to use a producer thread(s) to read the file, and consumer
-     *   thread(s) to process the redundancy detection
-     *   - We DO NOT NEED MORE THAN ONE CONSUMER / PRODUCER - I think we should
-     *   only have one and move up from there? (it seems like ONE of these needs
-     *   to be multithreaded though, eg we can either have multiple consumer or
-     *   producer threads, but do not necessarily need multiple for both?)
-     * - We need AT LEAST 2 extra threads (one consumer, one producer)
-     */
-
-    /* Note: We should keep track of the # of hits, and the total amount of data
-     * we processed, and the total amount of data we saved (total data size of
-     * all redundant packets / total data processed)
-     */
-    /* Data (in bytes) */
-    // NOTE due to the memory constraints on this program, we cannot save every
-    // packet... keep track of this data as we go? might have to store this on
-    // some variable that we pass to the threads instead...
-
-    // TODO keep track of the size of the data structures we are using (more
-    // like, how many packets are we putting on the heap?)
-    // TODO: connect these parameters to the logic
     int level = 1;
     int numThreads = 2; // TODO: change to "optimal" when we know what that is
     int c;
