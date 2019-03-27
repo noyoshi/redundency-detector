@@ -47,7 +47,7 @@ packet * parsePacket(FILE * fp) {
         p = (packet *) calloc(1, sizeof(packet));
         if (p == NULL) ERROR;
         check(fread(p->data, 1, dataLength, fp));
-        p->size = packetLength;
+        p->size = dataLength;
     } else {
         // If we fseek past the end of a file and never read, "eof" won't be set
         // Fix -> do a garbage fread that will set the "eof" if we are past the
