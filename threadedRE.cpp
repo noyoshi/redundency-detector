@@ -32,7 +32,7 @@ using namespace std;
 // Should also assume we have a buffer that is max full...
 #define MEMORY_LIMIT 63900000
 #define BLOOM_FILTER_SIZE 61000000
-#define N_HASHES 5
+#define N_HASHES 20
 
 // Global mutex / condition variables and file pointer
 typedef struct _thread__arg {
@@ -84,14 +84,15 @@ void addPacketToBuffer(packet * p) {
 
 int checkAndAddToBloomFilter(packet * p) {
     // Checks and adds the packet to the bloom filter
-    long djb2 = djb2Hash(p->data) % BLOOM_FILTER_SIZE;
+    unsigned long djb2 = djb2Hash(p->data) % BLOOM_FILTER_SIZE;
     unsigned char murmur[128];
     MurmurHash3_x64_128(p->data, 2400, 1230, murmur);
     long hash = 0; 
     // By default assume that it is redundant
     int redundant = 1;
-    for (int i = 0; i < N_HASHES; i ++) {
-        hash = (int) murmur[0] + djb2 * i;
+    for (int i = 1; i < N_HASHES + 1; i ++) {
+        // The more dank this is, the better this is gonna be!
+        hash = (int) murmur[0] + ((int) murmur[1] * 33) + djb2 * i;
         hash = hash % BLOOM_FILTER_SIZE;
         // If the bloom filter comes up with ANY 0s, then we KNOW that this is 
         // NOT redundant
@@ -101,7 +102,8 @@ int checkAndAddToBloomFilter(packet * p) {
         // bloom filter
         bloomFilter[hash] = 1;
 #ifdef DEBUG_ALL
-        printf("[HASH] %ld\n", hash);
+        /* printf("[HASH] %ld\n", hash); */
+        /* printf("[MURMUR] %d\n", (int) murmur[0]); */
 #endif
     }
     return redundant;

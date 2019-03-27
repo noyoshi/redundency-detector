@@ -7,13 +7,8 @@
 typedef struct _packet {
     /* bool isValid; */ 
     unsigned char   data[DATA_SIZE]; /* 2400 bytes is max packet size */
-    int             hash; /* Hash of the packet */
     uint32_t        size; /* Size of the packet */
 } packet;
 
 unsigned long long djb2Hash(unsigned char*); 
-bool checkContent(packet *, packet *, int); 
-float getTotalData(std::vector<packet *>);
-
-void freePackets(); 
 packet * parsePacket(FILE *);
