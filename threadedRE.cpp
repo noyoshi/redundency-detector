@@ -2,7 +2,6 @@
 #include <ctype.h>
 #include <errno.h>
 #include <iostream>
-#include <list>
 #include <pthread.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -15,8 +14,6 @@
 #include "config.h"
 
 #include "murmur3/murmur3.h"
-
-using namespace std;
 
 /* This is the gloabl struct that we will want to modify in the consumer
  * threads, eg we should increment hits and totalRedundantBytes when the
@@ -31,7 +28,7 @@ using namespace std;
 // 62 MB TODO see how close to 64 MB we can get
 // Should also assume we have a buffer that is max full...
 #define MEMORY_LIMIT 63900000
-#define BLOOM_FILTER_SIZE 61000000
+#define BLOOM_FILTER_SIZE 62500000
 #define BUFFER_SIZE 15
 #define N_HASHES 20
 
@@ -106,9 +103,11 @@ int checkAndAddToBloomFilter(packet * p) {
         bloomFilter[hash] = 1;
 #ifdef DEBUG_ALL
         printf("[HASH] %ld\n", hash);
-        printf("[MURMUR] %d\n", (int) murmur[0]);
 #endif
     }
+#ifdef DEBUG_ALL
+    printf("[MURMUR] %d\n", (int) murmur[0]);
+#endif
     return redundant;
 }
 
