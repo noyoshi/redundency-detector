@@ -1,10 +1,8 @@
 /* The implementations for decoding the packets from the file and saving them to
  * a data structure */
 #include <iostream>
-#include <vector>
 #include <pcap.h>
 #include <stdio.h>
-#include <vector>
 
 #include "packet.h"
 #include "config.h"

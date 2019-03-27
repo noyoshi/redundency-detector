@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
 #include "unistd.h"
 
 #include "packet.h"
@@ -15,22 +16,16 @@
 
 #include "murmur3/murmur3.h"
 
-/* This is the gloabl struct that we will want to modify in the consumer
- * threads, eg we should increment hits and totalRedundantBytes when the
- * consumer encounters a redundant packet
- */
-
-/* Generates a report */
+/* Generates the report */
 #define REPORT \
     { printf("%ld bytes processed\n%d hits\n%ld%% redundency detected\n", \
         totalBytesProcessed, hits, (totalRedundantBytes * 100) / totalBytesProcessed);} \
 
-// 62 MB TODO see how close to 64 MB we can get
-// Should also assume we have a buffer that is max full...
-#define MEMORY_LIMIT 63900000
+// Figure out how close we can get to 64 MB 
 #define BLOOM_FILTER_SIZE 62500000
 #define BUFFER_SIZE 15
 #define N_HASHES 20
+#define STRIDE 64
 
 // Global mutex / condition variables and file pointer
 typedef struct _thread__arg {
@@ -55,7 +50,7 @@ bool doneReading = false;
 packet * sharedBuffer[BUFFER_SIZE] = { NULL };
 char bloomFilter[BLOOM_FILTER_SIZE] = { 0 };
 
-int LEVEL = 1;
+int level = 1;
 
 /* Debug stuff */
 #ifdef DEBUG_ALL
@@ -84,8 +79,10 @@ void addPacketToBuffer(packet * p) {
 #endif
 }
 
-int checkAndAddToBloomFilter(packet * p) {
+void checkAndAddToBloomFilter(packet * p) {
     // Checks and adds the packet to the bloom filter
+    // TODO make this a loop that checks on windows of a certain size
+    // If it is level 1, then the window size is the entire packet
     unsigned long djb2 = djb2Hash(p->data) % BLOOM_FILTER_SIZE;
     unsigned char murmur[128];
     MurmurHash3_x64_128(p->data, 2400, 1230, murmur);
@@ -98,7 +95,9 @@ int checkAndAddToBloomFilter(packet * p) {
         hash = hash % BLOOM_FILTER_SIZE;
         // If the bloom filter comes up with ANY 0s, then we KNOW that this is 
         // NOT redundant
-        if (bloomFilter[hash] == 0) redundant = 0; 
+        if (bloomFilter[hash] == 0) {
+            redundant = 0; 
+        }
 
         // After the above check, we set it to 1, thereby "adding" it to the
         // bloom filter
@@ -110,7 +109,12 @@ int checkAndAddToBloomFilter(packet * p) {
 #ifdef DEBUG_ALL
     printf("[MURMUR] %d\n", (int) murmur[0]);
 #endif
-    return redundant;
+
+    // Do redundancy handling here
+    if (redundant == 1) {
+        hits ++;
+        totalRedundantBytes += p->size;
+    }
 }
 
 void * consumerThread(void * arg) {
@@ -126,10 +130,7 @@ void * consumerThread(void * arg) {
         if (sharedBufferIndex > 0) {
             packet * p = sharedBuffer[--sharedBufferIndex];
             assert(p != NULL);
-            if (checkAndAddToBloomFilter(p) == 1) {
-                hits ++;
-                totalRedundantBytes += p->size;
-            }
+            checkAndAddToBloomFilter(p);
             freePacket(p);
         }
         pthread_cond_signal(args->empty);
@@ -143,7 +144,7 @@ void * producerThread(void * arg) {
     thread_args * args = (thread_args *) arg;
 
     // Loop through the file and parse the packets
-    while(feof(args->fp) == 0) {
+    while (feof(args->fp) == 0) {
         // Parses out the packets from the file pointer
         packet * p = parsePacket(args->fp);
         pthread_mutex_lock(args->mutex);
@@ -175,7 +176,7 @@ void help(char *progname, int status) {
 }
 
 
-void analyzeFile(FILE * fp, int numThreads, bool output) {
+void analyzeFile(FILE * fp, int numThreads) {
     /* Producer that loops through the input file and fills a queue of packets */
 
     /* Since we might be analyzing multiple files, we want to re-initialize the
@@ -231,9 +232,8 @@ void analyzeFile(FILE * fp, int numThreads, bool output) {
         if (pthread_join(consumers[i], NULL) < 0) ERROR;
     }
 
-    /* Frees the argument struct */
-    if (output)
-        REPORT;
+    /* Frees the argument struct and generates the report */
+    REPORT;
     free(threadArgs);
 
     /* For development */
@@ -256,19 +256,18 @@ bool isNumber(char * optarg) {
 int main(int argc, char * argv[]) {
     int numThreads = 2;
     int c;
-    bool output = false;
 
     if(argc == 1) help(argv[0], 1);
 
     // process command line arguments
-    while((c = getopt(argc, argv, "hl:t:o")) != -1){
+    while((c = getopt(argc, argv, "hl:t:")) != -1){
         switch(c){
             case 'h':
                 help(argv[0], 0);
             case 'l':
                 if (!isNumber(optarg)) help(argv[0], 1);
-                LEVEL = atoi(optarg);
-                if(LEVEL != 1 && LEVEL != 2){
+                level = atoi(optarg);
+                if (level != 1 && level != 2){
                     fprintf(stderr, "[ERROR] Invalid level specified\n");
                     help(argv[0], 1);
                 }
@@ -281,9 +280,6 @@ int main(int argc, char * argv[]) {
                     help(argv[0], 1);
                 }
                 break;
-            case 'o':
-                output = true;
-                break;
             default:
                 help(argv[0], 1);
                 break;
@@ -291,11 +287,11 @@ int main(int argc, char * argv[]) {
     }
 
     // process files remaining in command line arguments
-    for(size_t i = optind; i < (size_t) argc; i++){
+    for (size_t i = optind; i < (size_t) argc; i++){
         FILE * inputFile = fopen(argv[i], "r");
         if (inputFile == NULL) ERROR;
         // Get the packet data from the file
-        analyzeFile(inputFile, numThreads, output);
+        analyzeFile(inputFile, numThreads);
 
         /* Cleanup */
         fclose(inputFile);

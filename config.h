@@ -7,7 +7,6 @@
 #include <string.h>
 #include <errno.h>
 
-#define HASHTABLE_SIZE 20000
 #define DATA_SIZE 2400
 
 #define debug(M, ...) \
