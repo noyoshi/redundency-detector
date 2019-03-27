@@ -16,4 +16,4 @@ bool checkContent(packet *, packet *, int);
 float getTotalData(std::vector<packet *>);
 
 void freePackets(); 
-packet* parsePacket(FILE *);
+packet * parsePacket(FILE *);

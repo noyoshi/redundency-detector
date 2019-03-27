@@ -54,11 +54,10 @@ void freePackets() {
     // TODO free the packets!
 }
 
-packet* parsePacket(FILE * fp) {
+packet * parsePacket(FILE * fp) {
     /* Parses the file we are reading and creates a single packet */
     uint32_t     packetLength;
-
-    packet *p = NULL;
+    packet * p = NULL;
 
     /* Skip the ts_sec field */
     /* check(fseek(fp, 4, SEEK_CUR)); */
@@ -88,9 +87,10 @@ packet* parsePacket(FILE * fp) {
         // TODO save the packet to the shared data structure here
         // TODO set something so that the consumer can know that there is
         // some new data to work on
-        p = (packet*) calloc(1, sizeof(packet));
+        p = (packet *) calloc(1, sizeof(packet));
         if (p == NULL) ERROR;
         check(fread(p->data, 1, dataLength, fp));
+
         /* p->hash =  hashData(p->data) % HASHTABLE_SIZE; */
         p->size = packetLength; // TODO is this the correct number?
     } else {
