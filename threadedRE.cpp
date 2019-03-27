@@ -13,6 +13,7 @@
 #include "packet.h"
 #include "config.h"
 #include "unistd.h"
+#include "murmur3/murmur3.h"
 
 
 using namespace std;
@@ -24,12 +25,14 @@ using namespace std;
 
 /* Generates a report */
 #define REPORT \
-    { printf("%ld bytes processed\n%d hits\n%ld redundency detected\n", \
+    { printf("%ld bytes processed\n%d hits\n%ld %% redundency detected\n", \
         totalBytesProcessed, hits, (totalRedundantBytes * 100) / totalBytesProcessed);} \
 
 // 62 MB TODO see how close to 64 MB we can get
 // Should also assume we have a buffer that is max full...
 #define MEMORY_LIMIT 63900000
+#define BLOOM_FILTER_SIZE 61000000
+#define N_HASHES 5
 
 // Global mutex / condition variables and file pointer
 typedef struct _thread__arg {
@@ -57,12 +60,11 @@ int maxListSize = 0;
 bool doneReading = false;
 
 packet * sharedBuffer[15] = { NULL };
-list<packet *> * hashTable[HASHTABLE_SIZE]  = { NULL };
+char bloomFilter[BLOOM_FILTER_SIZE] = { 0 };
 
 packet * get() {
     // TODO consider taking this out as it is an extra subroutine call...
     sharedBufferIndex --;
-    printf("sharedBufferIndex -> %d\n", sharedBufferIndex);
     return sharedBuffer[sharedBufferIndex];
 }
 
@@ -80,15 +82,29 @@ void addPacketToBuffer(packet * p) {
         maxDataInMemory = dataInMemory;
 }
 
-void addPacketToHashTable(packet * p) {
-    /* BEWARE MEMORY LEAKS */
-    // ALSO CHECK TO SEE IF WE ARE OVER MEMORY LIMIT
-    if (dataInMemory >= MEMORY_LIMIT) {
-        freePacket(p);
-        return;
+int checkAndAddToBloomFilter(packet * p) {
+    // Checks and adds the packet to the bloom filter
+    long djb2 = djb2Hash(p->data) % BLOOM_FILTER_SIZE;
+    unsigned char murmur[128];
+    MurmurHash3_x64_128(p->data, 2400, 1230, murmur);
+    long hash = 0; 
+    // By default assume that it is redundant
+    int redundant = 1;
+    for (int i = 0; i < N_HASHES; i ++) {
+        hash = (int) murmur[0] + djb2 * i;
+        hash = hash % BLOOM_FILTER_SIZE;
+        // If the bloom filter comes up with ANY 0s, then we KNOW that this is 
+        // NOT redundant
+        if (bloomFilter[hash] == 0) redundant = 0; 
+
+        // After the above check, we set it to 1, thereby "adding" it to the
+        // bloom filter
+        bloomFilter[hash] = 1;
+#ifdef DEBUG_ALL
+        printf("[HASH] %ld\n", hash);
+#endif
     }
-    hashTable[p->hash] = new list<packet *>;
-    hashTable[p->hash]->push_back(p);
+    return redundant;
 }
 
 void * consumerThread(void * arg) {
@@ -110,39 +126,11 @@ void * consumerThread(void * arg) {
         if (sharedBufferIndex > 0) {
             packet * p = get();
             assert(p != NULL);
-            list<packet *> * listPtr = hashTable[p->hash];
-            if (listPtr == NULL) {
-                addPacketToHashTable(p);
-            } else {
-                puts("collision");
-                bool foundMatch = false;
-                for (list<packet *>::iterator it = listPtr->begin(); it != listPtr->end(); it ++) {
-                    if (checkContent(*it, p, 1)) {
-                        // Found redundant data
-                        totalRedundantBytes += p->size;
-                        foundMatch = true;
-                        hits ++;
-                        freePacket(p); 
-                        break;
-                    }
-                }
-                if (!foundMatch) {
-                    // If we did not find an exact match, add the packet to the
-                    // bucket IF WE HAVE NOT GOTTEN TO MEMORY LIMIT
-                    if (dataInMemory <= MEMORY_LIMIT)
-                        listPtr->push_back(p);
-                    else 
-                        freePacket(p);
-                    // TODO remove this hwn we are done testing
-                    if (listPtr->size() > maxListSize) {
-                        maxListSize = listPtr->size();
-                    }
-                } 
-                /* totalRedundantBytes += p->size; */
-                // TODO cache eviction? idk
-                /* freePacket(p); */
-                // TODO full match?
+            if (checkAndAddToBloomFilter(p) == 1) {
+                hits ++;
+                totalRedundantBytes += p->size;
             }
+            freePacket(p);
         }
         pthread_cond_signal(args->empty);
         pthread_mutex_unlock(args->mutex);
@@ -186,21 +174,8 @@ void help(char *progname) {
     exit(0);
 }
 
-void freeHashTable() {
-    for (size_t i = 0; i < HASHTABLE_SIZE; i ++) {
-        if (hashTable[i] != NULL) {
-            // Free all packets in the bucket
-            for (list<packet *>::iterator it = hashTable[i]->begin(); it != hashTable[i]->end(); it ++) {
-                free(*it);
-            }
-            // Frees the bucket
-            free(hashTable[i]);
-            hashTable[i] = NULL;
-        }
-    }
-}
 
-void analyzeFile(FILE * fp, int numThreads) {
+void analyzeFile(FILE * fp, int numThreads, bool output) {
     /* Producer that loops through the input file and fills a queue of packets */
     // TODO either make this into something that can be run in a thread, or call
     // a thread that reads the file
@@ -209,11 +184,8 @@ void analyzeFile(FILE * fp, int numThreads) {
      * global variables to zero
      */
     hits = 0;
-    totalRedundantBytes = 0;
-    totalBytesProcessed = 0;
     sharedBufferIndex = 0;
     doneReading = false;
-    sharedBufferIndex = 0;
     numPackets = 0;
 
     /* Condition variables and lock */
@@ -250,7 +222,7 @@ void analyzeFile(FILE * fp, int numThreads) {
     pthread_t consumers[numThreads];
 
     // Make all the consumers
-    for (size_t i = 0; i < numThreads; i ++) {
+    for (size_t i = 0; i < (size_t) numThreads; i ++) {
         if (pthread_create(&consumers[i], NULL, consumerThread, threadArgs) < 0) {
             free(threadArgs);
             ERROR;
@@ -261,19 +233,22 @@ void analyzeFile(FILE * fp, int numThreads) {
     if (pthread_join(producer, NULL) < 0)
         ERROR;
 
-    for (size_t i = 0; i < numThreads; i ++) {
+    for (size_t i = 0; i < (size_t) numThreads; i ++) {
         if (pthread_join(consumers[i], NULL) < 0) ERROR;
     }
 
     /* Frees the argument struct */
-    REPORT;
+    if (output)
+        REPORT;
     free(threadArgs);
-    printf("%ld redundant bytes\n", totalRedundantBytes);
+    /* printf("%ld redundant bytes\n", totalRedundantBytes); */
 
     /* For development */
-    fprintf(stderr, "%.2f MB max used for storage\n", (float) maxDataInMemory / 1000000.0f); 
+#ifdef DEBUG_ALL
+    float dataInMemory = (float) maxDataInMemory + sizeof(char) * BLOOM_FILTER_SIZE;
     fprintf(stderr, "%ld packets processed\n", numPackets);
-    fprintf(stderr, "%d is the longest bucket\n", maxListSize);
+    fprintf(stderr, "%.2f MB max used for storage\n", dataInMemory / 1000000.0f); 
+#endif
 }
 
 bool isNumber(char * optarg) {
@@ -326,11 +301,12 @@ int main(int argc, char * argv[]) {
     int level = 1;
     int numThreads = 2; // TODO: change to "optimal" when we know what that is
     int c;
+    bool output = false;
 
     if(argc == 1) help(argv[0]);
 
     // process command line arguments
-    while((c = getopt(argc, argv, "hl:t:")) != -1){
+    while((c = getopt(argc, argv, "hl:t:o")) != -1){
         switch(c){
             case 'h':
                 help(argv[0]);
@@ -346,6 +322,9 @@ int main(int argc, char * argv[]) {
                 if (!isNumber(optarg)) help(argv[0]);
                 numThreads = atoi(optarg);
                 break;
+            case 'o':
+                output = true;
+                break;
             default:
                 help(argv[0]);
                 break;
@@ -353,17 +332,15 @@ int main(int argc, char * argv[]) {
     }
 
     // process files remaining in command line arguments
-    for(size_t i = optind; i < argc; i++){
+    for(size_t i = optind; i < (size_t) argc; i++){
         FILE * inputFile = fopen(argv[i], "r");
-        fprintf(stderr, "Analyzing file\n");
         if (inputFile == NULL) ERROR;
         // Get the packet data from the file
-        analyzeFile(inputFile, numThreads);
+        analyzeFile(inputFile, numThreads, output);
 
         /* Cleanup */
         fclose(inputFile);
     }
-    freeHashTable();
 
     return EXIT_SUCCESS;
 }

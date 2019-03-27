@@ -11,9 +11,9 @@ typedef struct _packet {
     uint32_t        size; /* Size of the packet */
 } packet;
 
-unsigned long long hashData(unsigned char*); 
+unsigned long long djb2Hash(unsigned char*); 
 bool checkContent(packet *, packet *, int); 
 float getTotalData(std::vector<packet *>);
 
 void freePackets(); 
-packet* parsePacket(FILE *);
+packet * parsePacket(FILE *);
