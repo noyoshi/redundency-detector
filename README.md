@@ -1,6 +1,32 @@
 # OS Project 4 - Redundancy Detection
 ### Noah Yoshida, Chan Hee Song, Nick Marcopoli, Allen Duong
 
+## Usage
+
+Use
+
+`$ make` 
+
+to compile the program `threadedRE`. 
+
+Run the program 
+
+`$ ./threadedRE -t [CONSUMER_THREADS] -l [LEVEL] FILE_1 FILE_2 .... `
+
+if no options are given, the level defaults to 1 and the number of consumer
+threads defaults to 1 (the optimal number).
+
+If for some reason you want to run the debug mode of the file, compile using
+
+`$ make debug`
+
+and run the program like normal. Warning: there will be a lot of output.
+
+If you want to run the test scripts, showing the times for different thread
+configurations (over the medium sizef pcap file), run
+
+`$ make test`
+
 ## Implementation
 
 In accordance with the project guidelines, we are using a producer / consumer
