@@ -9,6 +9,7 @@
 
 #define DATA_SIZE 2400
 
+/* Courtesy of Peter Bui's systems programming class */
 #define debug(M, ...) \
     fprintf(stderr, "DEBUG %s:%d:%s: " M "\n", __FILE__, __LINE__, __func__, ##__VA_ARGS__)
 

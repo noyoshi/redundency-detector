@@ -3,7 +3,6 @@
 #include <errno.h>
 #include <iostream>
 #include <pthread.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,7 +20,7 @@
     { printf("%ld bytes processed\n%d hits\n%ld%% redundency detected\n", \
         totalBytesProcessed, hits, (totalRedundantBytes * 100) / totalBytesProcessed);} \
 
-// Figure out how close we can get to 64 MB 
+// Figure out how close we can get to 64 MB
 #define BLOOM_FILTER_SIZE 62500000
 #define BUFFER_SIZE 15
 #define N_HASHES 5
@@ -44,8 +43,6 @@ long int totalBytesProcessed = 0;
 long int totalRedundantBytes = 0;
 bool combo = false;
 int comboBytes = 0;
-
-int maxListSize = 0;
 
 bool doneReading = false;
 
@@ -76,7 +73,7 @@ void addPacketToBuffer(packet * p) {
 #ifdef DEBUG_ALL
     dataInMemory += sizeof(packet);
     numPackets += 1;
-    if (dataInMemory > maxDataInMemory) 
+    if (dataInMemory > maxDataInMemory)
         maxDataInMemory = dataInMemory;
 #endif
 }
@@ -86,17 +83,17 @@ bool hashAndAdd(unsigned char * data, int size) {
     unsigned long djb2 = djb2Hash(data, size) % BLOOM_FILTER_SIZE;
     unsigned char murmur[128];
     MurmurHash3_x64_128(data, size, 1230, murmur);
-    long hash = 0; 
+    long hash = 0;
     // By default assume that it is redundant
     bool redundant = true;
     for (int i = 1; i < N_HASHES + 1; i ++) {
         // The more dank this is, the better this is gonna be!
         hash = (int) murmur[0] + ((int) murmur[1] * 33) + djb2 * i;
         hash = hash % BLOOM_FILTER_SIZE;
-        // If the bloom filter comes up with ANY 0s, then we KNOW that this is 
+        // If the bloom filter comes up with ANY 0s, then we KNOW that this is
         // NOT redundant
         if (bloomFilter[hash] == 0) {
-            redundant = false; 
+            redundant = false;
         }
 
         // After the above check, we set it to 1, thereby "adding" it to the
@@ -114,23 +111,19 @@ bool hashAndAdd(unsigned char * data, int size) {
         if (!combo){
             comboBytes = size;
             combo = true;
-        }else 
+        } else
             comboBytes += 1;
     }
 
     return redundant;
-    // return redundant;
 }
 
 void checkAndAddToBloomFilter(packet * p) {
     // Checks and adds the packet to the bloom filter
-    // TODO make this a loop that checks on windows of a certain size
-    // If it is level 1, then the window size is the entire packet
-    // This is making the assumption that the data size we are hashing 
-    // is always going to be of the window size?
     unsigned char data[STRIDE];
     int dataOffset = 0; // Where in the data array we are
     if (level == 2) {
+        // Use a sliding window of size STRIDE
         while ((dataOffset + STRIDE) < p->size) {
             memcpy(data, p->data + dataOffset, STRIDE);
             // If there wasn't a match, but we are currently processing a previous match,
@@ -146,28 +139,33 @@ void checkAndAddToBloomFilter(packet * p) {
             dataOffset ++;
         }
     } else if (level == 1) {
+        // Hash over the entire data part of the packet
         hashAndAdd(p->data, p->size);
     }
 
+    // At the end of the processing, if we were in the middle of processing a
+    // chunk of redundant data, flush that out
     if (combo) {
         combo = false;
         totalRedundantBytes += comboBytes;
         comboBytes = 0;
         hits ++;
-    } 
-    // TODO update hits and totalRedundantData
+    }
 }
 
 void * consumerThread(void * arg) {
     /* Consumer thread */
 
     thread_args * args = (thread_args *) arg;
+
     while (!doneReading || sharedBufferIndex > 0) {
         pthread_mutex_lock(args->mutex);
         // Spin
         while (!doneReading && sharedBufferIndex == 0) {
             pthread_cond_wait(args->fill, args->mutex);
         }
+        // Grabs a packet off the buffer, adds to bloom filter and checks and
+        // the same time, and then frees the packet
         if (sharedBufferIndex > 0) {
             packet * p = sharedBuffer[--sharedBufferIndex];
             assert(p != NULL);
@@ -194,13 +192,16 @@ void * producerThread(void * arg) {
             pthread_cond_wait(args->empty, args->mutex);
 
         // Pushes to the buffer
-        if (p != NULL) 
+        if (p != NULL)
             addPacketToBuffer(p);
 
         pthread_cond_signal(args->fill);
         pthread_mutex_unlock(args->mutex);
     }
+    // Set this to true to signal the consumer threads to start cleaning up the
+    // buffer
     doneReading = true;
+    // Make sure to wake up all sleeping consumers
     pthread_cond_broadcast(args->fill);
     return 0;
 }
@@ -220,7 +221,8 @@ void help(char *progname, int status) {
 void analyzeFile(FILE * fp, int numThreads) {
     /* Producer that loops through the input file and fills a queue of packets */
 
-    /* Since we might be analyzing multiple files, we want to re-initialize the
+    /*
+     * Since we might be analyzing multiple files, we want to re-initialize the
      * global variables to zero
      */
     hits = 0;
@@ -242,6 +244,8 @@ void analyzeFile(FILE * fp, int numThreads) {
 
     // Initializes a struct to hold arguments for the producer
     thread_args * threadArgs = (thread_args *) malloc(sizeof(thread_args));
+
+    if (threadArgs == NULL) ERROR;
 
     threadArgs->fp = fp;
     threadArgs->mutex = &mutex;
@@ -283,7 +287,7 @@ void analyzeFile(FILE * fp, int numThreads) {
 #ifdef DEBUG_ALL
     float dataInMemory = (float) maxDataInMemory + sizeof(char) * BLOOM_FILTER_SIZE;
     fprintf(stderr, "%ld packets processed\n", numPackets);
-    fprintf(stderr, "%.2f MB max used for storage\n", dataInMemory / 1000000.0f); 
+    fprintf(stderr, "%.2f MB max used for storage\n", dataInMemory / 1000000.0f);
 #endif
 }
 
@@ -297,7 +301,8 @@ bool isNumber(char * optarg) {
 }
 
 int main(int argc, char * argv[]) {
-    int numThreads = 2;
+    // Default the number of consumer threads to 1
+    int numThreads = 1;
     int c;
 
     if(argc == 1) help(argv[0], 1);
