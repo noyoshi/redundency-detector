@@ -103,3 +103,8 @@ operations we eliminate from other parts of the program. It also makes the code
 much simpler, since we do not have to keep the packets around after consuming
 them, and don't have to worry about evicting data.
 
+
+Throughout the code we use a few macros. `ERROR` and `check` in particular.
+`ERROR` prints the line it was on and exits with 1. `check` checks the return
+value of whatever it is wrapping, and if it is not valid (< 0), it calls
+`ERROR`.
