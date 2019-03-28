@@ -238,7 +238,7 @@ void analyzeFile(FILE * fp, int numThreads) {
     pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
     /* Jump through the global header of the file */
-    check(fseek(fp, 28, SEEK_SET));
+    check(fseek(fp, 24, SEEK_SET));
 
     // Initializes a struct to hold arguments for the producer
     thread_args * threadArgs = (thread_args *) malloc(sizeof(thread_args));
