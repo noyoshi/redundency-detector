@@ -77,16 +77,18 @@ files with data under 64 MB. These false positives can also be greatly mitigated
 by using good hashing functions. Our measured false positive rate seems to be
 very low - under 1%. This is probably because our bloom filter can be made as
 large as the maximum data constraint, or 64 MB. Each index in the bloom filter
-is 1 byte long, and thus we can have around 64 million indicies in it. We could
-theoretically store more data in this, as the bloom filter should be a bit
-array, but that would require some complicated bit shifting and we felt it was
-not worth the extra effort, as ~64 million indicies was proving to be plenty
-sufficient.
+is 1 bit long, and thus we can have around 510 million indicies in it. 
 
 Once we start getting to larger collections of
 data, the bloom filter really starts to shine. We have been able to process very
 large combinations of files with very little accuracy degradation which would be
 present in a cache that requires data eviction. 
+
+When processing high amounts of original data, the bloom filter can fill up.
+Accuracy degrades when it gets around 1/3 full, so we have decided to forefully
+evict everything from it when that happens. Even though this seems extreme, we
+are able to hold out for much longer and keep more data in memory than an
+implementation using traditional hash tables and saving the packet data.
 
 Our hashing functions are the **djb2** has and the **murmur3** hash. While just
 using two hashing functions with a bloom filter would not be sufficient in
