@@ -7,5 +7,7 @@ docker cp packet.cpp $CID:/root
 docker cp threadedRE.cpp $CID:/root
 docker cp config.h $CID:/root
 docker cp scripts/test.sh $CID:/root
+docker cp murmur3/murmur3.c $CID:/root
+docker cp murmur3/murmur3.h $CID:/root
 docker cp data/Dataset-Medium.pcap $CID:/root
 
