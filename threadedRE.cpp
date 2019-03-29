@@ -8,6 +8,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <bitset>
+
 #include "unistd.h"
 
 #include "packet.h"
@@ -17,14 +19,14 @@
 
 /* Generates the report */
 #define REPORT \
-    { printf("%ld bytes processed\n%d hits\n%ld%% redundency detected\n", \
+    { printf("\n\tBytes Processed:\t%ld\n\tTotal Cache Hits:\t%d\n\tRedundancy Detected:\t%ld%%\n", \
         totalBytesProcessed, hits, (totalRedundantBytes * 100) / totalBytesProcessed);} \
 
-// Figure out how close we can get to 64 MB
-#define BLOOM_FILTER_SIZE 62500000
+#define BLOOM_FILTER_SIZE 510000000
 #define BUFFER_SIZE 15
-#define N_HASHES 5
+#define N_HASHES 4
 #define STRIDE 64
+#define BLOOM_RATIO 3
 
 // Global mutex / condition variables and file pointer
 typedef struct _thread__arg {
@@ -43,11 +45,12 @@ long int totalBytesProcessed = 0;
 long int totalRedundantBytes = 0;
 bool combo = false;
 int comboBytes = 0;
+long int dataWordsProcessed = 0;
 
 bool doneReading = false;
 
 packet * sharedBuffer[BUFFER_SIZE] = { NULL };
-char bloomFilter[BLOOM_FILTER_SIZE] = { 0 };
+std::bitset<BLOOM_FILTER_SIZE> bloomFilter;
 
 int level = 1;
 
@@ -80,15 +83,24 @@ void addPacketToBuffer(packet * p) {
 
 bool hashAndAdd(unsigned char * data, int size) {
     /* Hashes data and adds it to the bloom filter? */
+    dataWordsProcessed += N_HASHES;
+    if (dataWordsProcessed > (BLOOM_FILTER_SIZE / BLOOM_RATIO)) {
+        // If we are in the danger zone of false positives, blow it away :(
+        dataWordsProcessed = 0;
+#ifdef DEBUG_ALL
+        puts("resetting the bloom filter");
+#endif
+        bloomFilter.reset();
+    }
     unsigned long djb2 = djb2Hash(data, size) % BLOOM_FILTER_SIZE;
     unsigned char murmur[128];
-    MurmurHash3_x64_128(data, size, 1230, murmur);
-    long hash = 0;
+    MurmurHash3_x64_128(data, size, 33, murmur);
+    size_t hash = 0;
     // By default assume that it is redundant
     bool redundant = true;
     for (int i = 1; i < N_HASHES + 1; i ++) {
         // The more dank this is, the better this is gonna be!
-        hash = (int) murmur[0] + ((int) murmur[1] * 33) + djb2 * i;
+        hash = (int) murmur[i] + ((int) murmur[i+1] * 33)  + ((int) murmur[i+2] * 5381)  + djb2 * i;
         hash = hash % BLOOM_FILTER_SIZE;
         // If the bloom filter comes up with ANY 0s, then we KNOW that this is
         // NOT redundant
@@ -100,7 +112,7 @@ bool hashAndAdd(unsigned char * data, int size) {
         // bloom filter
         bloomFilter[hash] = 1;
 #ifdef DEBUG_ALL
-        printf("[HASH] %ld\n", hash);
+        printf("[HASH] %lu\n", hash);
 #endif
     }
 #ifdef DEBUG_ALL
@@ -280,11 +292,13 @@ void analyzeFile(FILE * fp, int numThreads) {
     }
 
     /* Frees the argument struct and generates the report */
-    REPORT;
     free(threadArgs);
 
-    /* For development */
 #ifdef DEBUG_ALL
+    printf("%lu\n", bloomFilter.count());
+    printf("%lu\n", bloomFilter.size());
+    /* printf("%lu\n", sizeof(bloomFilter)); */
+    /* For development */
     float dataInMemory = (float) maxDataInMemory + sizeof(char) * BLOOM_FILTER_SIZE;
     fprintf(stderr, "%ld packets processed\n", numPackets);
     fprintf(stderr, "%.2f MB max used for storage\n", dataInMemory / 1000000.0f);
@@ -335,8 +349,12 @@ int main(int argc, char * argv[]) {
     }
 
     // process files remaining in command line arguments
+    int fileN = 1;
+    int numOfFiles = argc - optind;
+    printf("Using 1 producer thread, %d consumer threads, in level %d mode\n\n", numThreads, level);
     for (size_t i = optind; i < (size_t) argc; i++){
         FILE * inputFile = fopen(argv[i], "r");
+        printf("Processing File %d of %d\n", fileN++, numOfFiles);
         if (inputFile == NULL) ERROR;
         // Get the packet data from the file
         analyzeFile(inputFile, numThreads);
@@ -344,6 +362,7 @@ int main(int argc, char * argv[]) {
         /* Cleanup */
         fclose(inputFile);
     }
+    REPORT;
 
     return EXIT_SUCCESS;
 }
